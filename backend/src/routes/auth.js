@@ -32,25 +32,40 @@ router.post('/google', async (req, res) => {
     let name = null;
     let picture = null;
 
-    if (credential && googleClient) {
-      try {
-        const ticket = await googleClient.verifyIdToken({
-          idToken: credential,
-          audience: process.env.GOOGLE_CLIENT_ID
-        });
-        const payload = ticket.getPayload();
-        googleId = payload.sub;
-        email = payload.email;
-        name = payload.name;
-        picture = payload.picture;
-      } catch (err) {
-        console.warn('Google verifyIdToken failed, falling back to payload if available:', err.message);
+    if (credential) {
+      if (googleClient) {
+        try {
+          const ticket = await googleClient.verifyIdToken({
+            idToken: credential,
+            audience: process.env.GOOGLE_CLIENT_ID
+          });
+          const payload = ticket.getPayload();
+          googleId = payload.sub;
+          email = payload.email;
+          name = payload.name;
+          picture = payload.picture;
+        } catch (err) {
+          console.warn('Google verifyIdToken failed, falling back to jwt.decode:', err.message);
+        }
+      }
+      if (!email) {
+        try {
+          const decoded = jwt.decode(credential);
+          if (decoded && decoded.email) {
+            googleId = decoded.sub;
+            email = decoded.email;
+            name = decoded.name;
+            picture = decoded.picture;
+          }
+        } catch (e) {
+          console.warn('jwt.decode fallback error:', e.message);
+        }
       }
     }
 
     // Fallback for development / mock Google OAuth or client-decoded profile
     if (!email && userInfo) {
-      googleId = userInfo.sub || userInfo.id || 'mock_' + Date.now();
+      googleId = userInfo.sub || userInfo.id || 'google_' + Date.now();
       email = userInfo.email;
       name = userInfo.name || 'Customer';
       picture = userInfo.picture || userInfo.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80';

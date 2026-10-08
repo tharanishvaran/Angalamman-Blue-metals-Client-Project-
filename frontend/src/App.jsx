@@ -79,13 +79,29 @@ export default function App() {
     }
   };
 
+  // Pending action after Google login
+  const [pendingAction, setPendingAction] = useState(null); // { type: 'quote' | 'delivery', material: '' }
+  const [authBannerMessage, setAuthBannerMessage] = useState('');
+
   const handleLoginSuccess = (accountData, isAdmin) => {
     if (isAdmin) {
       setAdmin(accountData);
       setActiveView('admin-portal');
     } else {
       setUser(accountData);
-      // If customer was on home, stay on home or switch to dashboard
+      if (pendingAction) {
+        const action = pendingAction;
+        setPendingAction(null);
+        setTimeout(() => {
+          if (action.type === 'delivery') {
+            setSelectedMaterialForModal(action.material || '');
+            setDeliveryModalOpen(true);
+          } else if (action.type === 'quote') {
+            setSelectedMaterialForModal(action.material || '');
+            setQuoteModalOpen(true);
+          }
+        }, 120);
+      }
     }
   };
 
@@ -96,13 +112,27 @@ export default function App() {
     setActiveView('home');
   };
 
-  // Triggers for modals with pre-selected material
+  // Triggers for modals with pre-selected material (requires login before booking)
   const handleOpenQuoteWithMaterial = (materialName = '') => {
+    if (!user) {
+      setPendingAction({ type: 'quote', material: materialName });
+      setAuthBannerMessage('Please sign in with Google to request an official quotation');
+      setAuthInitialMode('customer');
+      setAuthModalOpen(true);
+      return;
+    }
     setSelectedMaterialForModal(materialName);
     setQuoteModalOpen(true);
   };
 
   const handleOpenDeliveryWithMaterial = (materialName = '') => {
+    if (!user) {
+      setPendingAction({ type: 'delivery', material: materialName });
+      setAuthBannerMessage('Please sign in with Google to book material delivery');
+      setAuthInitialMode('customer');
+      setAuthModalOpen(true);
+      return;
+    }
     setSelectedMaterialForModal(materialName);
     setDeliveryModalOpen(true);
   };
@@ -203,10 +233,12 @@ export default function App() {
           <Footer
             settings={settings}
             onOpenAuth={() => {
+              setAuthBannerMessage('');
               setAuthInitialMode('customer');
               setAuthModalOpen(true);
             }}
             onOpenAdminAuth={() => {
+              setAuthBannerMessage('');
               setAuthInitialMode('admin');
               setAuthModalOpen(true);
             }}
@@ -225,6 +257,13 @@ export default function App() {
         onClose={() => setQuoteModalOpen(false)}
         initialMaterial={selectedMaterialForModal}
         user={user}
+        onRequireLogin={() => {
+          setQuoteModalOpen(false);
+          setPendingAction({ type: 'quote', material: selectedMaterialForModal });
+          setAuthBannerMessage('Please sign in with Google to request an official quotation');
+          setAuthInitialMode('customer');
+          setAuthModalOpen(true);
+        }}
       />
 
       <DeliveryModal
@@ -232,12 +271,23 @@ export default function App() {
         onClose={() => setDeliveryModalOpen(false)}
         initialMaterial={selectedMaterialForModal}
         user={user}
+        onRequireLogin={() => {
+          setDeliveryModalOpen(false);
+          setPendingAction({ type: 'delivery', material: selectedMaterialForModal });
+          setAuthBannerMessage('Please sign in with Google to book material delivery');
+          setAuthInitialMode('customer');
+          setAuthModalOpen(true);
+        }}
       />
 
       <AuthModal
         isOpen={authModalOpen}
-        onClose={() => setAuthModalOpen(false)}
+        onClose={() => {
+          setAuthModalOpen(false);
+          setPendingAction(null);
+        }}
         initialMode={authInitialMode}
+        bannerMessage={authBannerMessage}
         onLoginSuccess={handleLoginSuccess}
       />
 

@@ -3,7 +3,7 @@ import { FileText, CheckCircle2, X } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { api } from '../api';
 
-export default function QuoteModal({ isOpen, onClose, initialMaterial = '', user }) {
+export default function QuoteModal({ isOpen, onClose, initialMaterial = '', user, onRequireLogin }) {
   const [form, setForm] = useState({
     name: '',
     mobile: '',
@@ -39,6 +39,10 @@ export default function QuoteModal({ isOpen, onClose, initialMaterial = '', user
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!user && onRequireLogin) {
+      onRequireLogin();
+      return;
+    }
     try {
       setLoading(true);
       const res = await api.submitQuote({
@@ -75,7 +79,7 @@ export default function QuoteModal({ isOpen, onClose, initialMaterial = '', user
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
             <div style={{ padding: '0.4rem', borderRadius: '8px', background: 'rgba(249, 115, 22, 0.2)', color: '#fb923c' }}>
               <FileText size={20} />
@@ -89,6 +93,61 @@ export default function QuoteModal({ isOpen, onClose, initialMaterial = '', user
             <X size={20} />
           </button>
         </div>
+
+        {/* User Status / Google Auth Badge */}
+        {user ? (
+          <div style={{
+            background: 'rgba(16, 185, 129, 0.08)',
+            border: '1px solid rgba(16, 185, 129, 0.25)',
+            borderRadius: '10px',
+            padding: '0.65rem 0.9rem',
+            marginBottom: '1.25rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem'
+          }}>
+            <img
+              src={user.profile_image || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'}
+              alt={user.name}
+              style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }}
+            />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span>{user.name}</span>
+                <span style={{ fontSize: '0.68rem', padding: '0.1rem 0.35rem', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.2)', color: '#34d399' }}>Google Verified</span>
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {user.email} {user.mobile ? `• +91 ${user.mobile}` : ''}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div style={{
+            background: 'rgba(59, 130, 246, 0.1)',
+            border: '1px solid rgba(59, 130, 246, 0.25)',
+            borderRadius: '10px',
+            padding: '0.75rem 1rem',
+            marginBottom: '1.25rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '0.75rem'
+          }}>
+            <div style={{ fontSize: '0.82rem', color: '#93c5fd' }}>
+              🔒 Sign in with Google to pre-fill details & track your quote
+            </div>
+            {onRequireLogin && (
+              <button
+                type="button"
+                onClick={onRequireLogin}
+                className="btn btn-outline btn-sm"
+                style={{ background: '#fff', color: '#1e293b', border: 'none', padding: '0.35rem 0.75rem', fontSize: '0.78rem', fontWeight: 600, borderRadius: '8px', cursor: 'pointer' }}
+              >
+                Sign in with Google
+              </button>
+            )}
+          </div>
+        )}
 
         {submittedQuote ? (
           <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>

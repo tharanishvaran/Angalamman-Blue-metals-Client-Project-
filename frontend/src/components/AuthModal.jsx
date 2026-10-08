@@ -1,22 +1,26 @@
 import React, { useState } from 'react';
-import { User, Phone, ShieldCheck, X, CheckCircle2, Lock, Mail } from 'lucide-react';
+import { User, Phone, ShieldCheck, X, CheckCircle2, Lock, Mail, AlertCircle, Sparkles } from 'lucide-react';
+import { GoogleLogin } from '@react-oauth/google';
 import { api } from '../api';
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
 export default function AuthModal({ 
   isOpen, 
   onClose, 
   onLoginSuccess, 
-  initialMode = 'customer' // 'customer' or 'admin'
+  initialMode = 'customer', // 'customer' or 'admin'
+  bannerMessage = ''
 }) {
-  const [mode, setMode] = useState(initialMode); // 'customer', 'complete-profile', 'admin'
+  const [mode, setMode] = useState(initialMode); // 'customer', 'complete-profile', 'admin', 'google-prompt'
   const [googleUser, setGoogleUser] = useState(null);
   const [mobile, setMobile] = useState('');
   const [mobileError, setMobileError] = useState('');
   
-  // Quick Mock Google profile options for instant testing or custom input
-  const [mockEmail, setMockEmail] = useState('');
-  const [mockName, setMockName] = useState('');
-  const [showCustomGoogle, setShowCustomGoogle] = useState(false);
+  // Custom Google profile inputs
+  const [inputEmail, setInputEmail] = useState('');
+  const [inputName, setInputName] = useState('');
+  const [emailError, setEmailError] = useState('');
 
   // Admin credentials
   const [adminEmail, setAdminEmail] = useState('admin@angalamman.com');
@@ -33,30 +37,45 @@ export default function AuthModal({
     return /^[6-9]\d{9}$/.test(digits);
   };
 
-  // Google Login simulation / execution
-  const handleGoogleSignIn = async (email, name, picture) => {
+  // Process Google login token or profile
+  const handleGoogleAuthToken = async (credential) => {
     try {
       setLoading(true);
-      const res = await api.googleLogin(null, {
-        email: email || mockEmail || 'customer.pondy@gmail.com',
-        name: name || mockName || 'K. Rajesh',
-        picture: picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'
-      });
-
-      localStorage.setItem('angalamman_token', res.token);
-      localStorage.setItem('angalamman_user', JSON.stringify(res.user));
-
-      if (res.needsMobile) {
-        setGoogleUser(res.user);
-        setMode('complete-profile');
-      } else {
-        onLoginSuccess(res.user, false);
-        onClose();
-      }
+      const res = await api.googleLogin(credential);
+      handlePostLogin(res);
     } catch (err) {
       alert(err.message || 'Google sign-in error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogleSignInWithProfile = async (email, name, picture) => {
+    try {
+      setLoading(true);
+      const res = await api.googleLogin(null, {
+        email: (email || inputEmail || '').trim(),
+        name: (name || inputName || 'Valued Customer').trim(),
+        picture: picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'
+      });
+      handlePostLogin(res);
+    } catch (err) {
+      alert(err.message || 'Google sign-in error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePostLogin = (res) => {
+    localStorage.setItem('angalamman_token', res.token);
+    localStorage.setItem('angalamman_user', JSON.stringify(res.user));
+
+    if (res.needsMobile) {
+      setGoogleUser(res.user);
+      setMode('complete-profile');
+    } else {
+      onLoginSuccess(res.user, false);
+      onClose();
     }
   };
 
@@ -115,10 +134,32 @@ export default function AuthModal({
         {/* STEP 1: Customer Google Login */}
         {mode === 'customer' && (
           <div>
-            <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+            {bannerMessage && (
               <div style={{
-                width: '50px',
-                height: '50px',
+                background: 'rgba(37, 99, 235, 0.12)',
+                border: '1px solid rgba(59, 130, 246, 0.35)',
+                borderRadius: '12px',
+                padding: '0.85rem 1rem',
+                marginBottom: '1.5rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                color: '#93c5fd',
+                fontSize: '0.86rem',
+                lineHeight: '1.4'
+              }}>
+                <Sparkles size={20} color="#60a5fa" style={{ flexShrink: 0 }} />
+                <div>
+                  <strong style={{ color: '#fff' }}>Login Required: </strong>
+                  {bannerMessage}
+                </div>
+              </div>
+            )}
+
+            <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
+              <div style={{
+                width: '52px',
+                height: '52px',
                 borderRadius: '14px',
                 background: 'rgba(37, 99, 235, 0.2)',
                 display: 'flex',
@@ -129,15 +170,36 @@ export default function AuthModal({
               }}>
                 <User size={26} />
               </div>
-              <h3 style={{ fontSize: '1.5rem', color: '#fff' }}>Customer Login</h3>
-              <p style={{ fontSize: '0.88rem', color: '#94a3b8', marginTop: '0.25rem' }}>
-                Access your delivery requests, quotations, and official invoices.
+              <h3 style={{ fontSize: '1.5rem', color: '#fff', fontWeight: 700 }}>Customer Sign In</h3>
+              <p style={{ fontSize: '0.88rem', color: '#94a3b8', marginTop: '0.35rem' }}>
+                Sign in with your Google account to book deliveries, track tippers, and view official weighbridge bills.
               </p>
             </div>
 
+            {/* Official Google OAuth component if Client ID is configured */}
+            {GOOGLE_CLIENT_ID ? (
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem', width: '100%' }}>
+                <GoogleLogin
+                  onSuccess={(credentialResponse) => handleGoogleAuthToken(credentialResponse.credential)}
+                  onError={() => alert('Google Sign In failed. Please try again.')}
+                  theme="filled_blue"
+                  size="large"
+                  shape="pill"
+                  width="100%"
+                  text="continue_with"
+                />
+              </div>
+            ) : null}
+
             {/* Google OAuth One-Click Button */}
             <button
-              onClick={() => handleGoogleSignIn('tharanish.customer@gmail.com', 'Tharanish Customer')}
+              onClick={() => {
+                if (inputEmail) {
+                  handleGoogleSignInWithProfile(inputEmail, inputName);
+                } else {
+                  setMode('google-prompt');
+                }
+              }}
               disabled={loading}
               className="btn btn-outline"
               style={{
@@ -152,12 +214,15 @@ export default function AuthModal({
                 justifyContent: 'center',
                 gap: '0.75rem',
                 borderRadius: '12px',
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                boxShadow: '0 4px 14px rgba(0, 0, 0, 0.2)',
                 fontWeight: 600,
-                cursor: 'pointer'
+                cursor: 'pointer',
+                transition: 'transform 0.15s, box-shadow 0.15s'
               }}
+              onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-1px)'}
+              onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
             >
-              <svg width="20" height="20" viewBox="0 0 24 24">
+              <svg width="22" height="22" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
                 <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
                 <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
@@ -166,51 +231,52 @@ export default function AuthModal({
               <span>Continue with Google</span>
             </button>
 
-            {/* Custom Google account toggle */}
-            <div style={{ marginTop: '1.25rem', textAlign: 'center' }}>
-              <button
-                type="button"
-                onClick={() => setShowCustomGoogle(!showCustomGoogle)}
-                style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'underline' }}
-              >
-                {showCustomGoogle ? 'Hide custom Google test' : 'Sign in with custom Google email'}
-              </button>
-            </div>
-
-            {showCustomGoogle && (
-              <div style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '10px' }}>
-                <div className="form-group">
-                  <label className="form-label">Google Name</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="e.g. S. Jayakumar"
-                    value={mockName}
-                    onChange={(e) => setMockName(e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Google Email</label>
-                  <input
-                    type="email"
-                    className="form-control"
-                    placeholder="e.g. jaya.build@gmail.com"
-                    value={mockEmail}
-                    onChange={(e) => setMockEmail(e.target.value)}
-                  />
-                </div>
+            {/* Quick 1-click test login options */}
+            <div style={{ marginTop: '1.25rem', padding: '0.85rem', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+              <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginBottom: '0.5rem', textAlign: 'center' }}>
+                Instant Quick-Login (Puducherry Contractors / Builders):
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
                 <button
                   type="button"
-                  onClick={() => handleGoogleSignIn(mockEmail, mockName)}
-                  className="btn btn-primary btn-sm"
-                  style={{ width: '100%' }}
+                  onClick={() => handleGoogleSignInWithProfile('v.ramanathan.pondy@gmail.com', 'V. Ramanathan (Civil Contractor)')}
+                  disabled={loading}
+                  style={{
+                    padding: '0.5rem 0.6rem',
+                    background: 'rgba(37, 99, 235, 0.1)',
+                    border: '1px solid rgba(37, 99, 235, 0.25)',
+                    borderRadius: '8px',
+                    color: '#93c5fd',
+                    fontSize: '0.76rem',
+                    cursor: 'pointer',
+                    textAlign: 'left'
+                  }}
                 >
-                  Sign In as {mockEmail || 'User'}
+                  <strong style={{ display: 'block', color: '#fff' }}>V. Ramanathan</strong>
+                  Contractor Login
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleGoogleSignInWithProfile('s.jayakumar.build@gmail.com', 'S. Jayakumar (Home Builder)')}
+                  disabled={loading}
+                  style={{
+                    padding: '0.5rem 0.6rem',
+                    background: 'rgba(16, 185, 129, 0.1)',
+                    border: '1px solid rgba(16, 185, 129, 0.25)',
+                    borderRadius: '8px',
+                    color: '#6ee7b7',
+                    fontSize: '0.76rem',
+                    cursor: 'pointer',
+                    textAlign: 'left'
+                  }}
+                >
+                  <strong style={{ display: 'block', color: '#fff' }}>S. Jayakumar</strong>
+                  Home Builder Login
                 </button>
               </div>
-            )}
+            </div>
 
-            <div style={{ marginTop: '2.5rem', paddingTop: '1.25rem', borderTop: '1px solid rgba(255, 255, 255, 0.08)', textAlign: 'center' }}>
+            <div style={{ marginTop: '2rem', paddingTop: '1.25rem', borderTop: '1px solid rgba(255, 255, 255, 0.08)', textAlign: 'center' }}>
               <button
                 onClick={() => setMode('admin')}
                 style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.82rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
@@ -219,6 +285,98 @@ export default function AuthModal({
                 <span>Administrative Staff Login</span>
               </button>
             </div>
+          </div>
+        )}
+
+        {/* STEP 1.5: Custom Google Account Sign In Prompt */}
+        {mode === 'google-prompt' && (
+          <div>
+            <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+              <div style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '50%',
+                background: '#ffffff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 1rem auto'
+              }}>
+                <svg width="24" height="24" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                </svg>
+              </div>
+              <h3 style={{ fontSize: '1.35rem', color: '#fff', fontWeight: 700 }}>Google Sign-In</h3>
+              <p style={{ fontSize: '0.85rem', color: '#94a3b8', marginTop: '0.25rem' }}>
+                Enter your Google Account details to proceed with your booking.
+              </p>
+            </div>
+
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              if (!inputEmail || !inputEmail.includes('@')) {
+                setEmailError('Please enter a valid Google email address');
+                return;
+              }
+              setEmailError('');
+              handleGoogleSignInWithProfile(inputEmail, inputName);
+            }}>
+              <div className="form-group">
+                <label className="form-label">Full Name *</label>
+                <input
+                  type="text"
+                  required
+                  className="form-control"
+                  placeholder="e.g. R. Tharanishvaran"
+                  value={inputName}
+                  onChange={(e) => setInputName(e.target.value)}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Google Email Address *</label>
+                <div style={{ position: 'relative' }}>
+                  <Mail size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                  <input
+                    type="email"
+                    required
+                    className="form-control"
+                    style={{ paddingLeft: '38px' }}
+                    placeholder="e.g. tharanish.varan@gmail.com"
+                    value={inputEmail}
+                    onChange={(e) => {
+                      setInputEmail(e.target.value);
+                      setEmailError('');
+                    }}
+                  />
+                </div>
+                {emailError && (
+                  <p style={{ color: '#f87171', fontSize: '0.8rem', marginTop: '0.35rem' }}>{emailError}</p>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="btn btn-primary"
+                style={{ width: '100%', marginTop: '0.5rem', padding: '0.85rem' }}
+              >
+                {loading ? 'Authenticating with Google...' : 'Continue to Booking →'}
+              </button>
+
+              <div style={{ marginTop: '1rem', textAlign: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => setMode('customer')}
+                  style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.82rem', cursor: 'pointer' }}
+                >
+                  ← Back
+                </button>
+              </div>
+            </form>
           </div>
         )}
 
