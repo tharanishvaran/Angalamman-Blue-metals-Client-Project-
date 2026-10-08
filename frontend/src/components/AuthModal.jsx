@@ -67,17 +67,32 @@ export default function AuthModal({
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((email || '').trim());
   };
 
+  const ADMIN_EMAILS = [
+    'angalammanbluemetalspondy@gmail.com',
+    'sriangalammanbluemetalspondy@gmail.com',
+    'admin@angalamman.com'
+  ];
+
   const handlePostLogin = useCallback((res) => {
     localStorage.setItem('angalamman_token', res.token);
 
-    if (res.is_admin) {
+    const isAdmin = Boolean(
+      res.is_admin ||
+      res.user?.role === 'SUPER_ADMIN' ||
+      res.user?.role === 'ADMIN' ||
+      ADMIN_EMAILS.includes((res.user?.email || '').toLowerCase().trim())
+    );
+
+    if (isAdmin) {
       localStorage.setItem('angalamman_admin', JSON.stringify(res.user));
+      localStorage.removeItem('angalamman_user');
       onLoginSuccess(res.user, true);
       onClose();
       return;
     }
 
     localStorage.setItem('angalamman_user', JSON.stringify(res.user));
+    localStorage.removeItem('angalamman_admin');
 
     if (res.needsMobile) {
       setGoogleUser(res.user);

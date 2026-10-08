@@ -79,7 +79,33 @@ router.post('/google', async (req, res) => {
     const ip = req.ip || req.headers['x-forwarded-for'] || '127.0.0.1';
     const userAgent = req.headers['user-agent'] || 'Unknown';
 
-    // ─── ADMIN CHECK: If this email belongs to an Admin (e.g. angalammanbluemetalspondy@gmail.com) ───
+    // ─── ADMIN CHECK: If this email belongs to an Admin ───
+    const SUPER_ADMIN_EMAILS = [
+      'angalammanbluemetalspondy@gmail.com',
+      'sriangalammanbluemetalspondy@gmail.com',
+      'admin@angalamman.com'
+    ];
+
+    // If it's one of the designated super admin emails, guarantee record exists in admins
+    if (SUPER_ADMIN_EMAILS.includes(cleanEmail)) {
+      const existingAdmin = db.prepare('SELECT id, status, role FROM admins WHERE LOWER(email) = ?').get(cleanEmail);
+      if (!existingAdmin) {
+        const adminSalt = bcrypt.genSaltSync(10);
+        const passHash = bcrypt.hashSync('Admin@1234', adminSalt);
+        db.prepare(`
+          INSERT INTO admins (name, email, password_hash, role, status)
+          VALUES (?, ?, ?, 'SUPER_ADMIN', 'ACTIVE')
+        `).run(name || 'Sri Angalamman Admin', cleanEmail, passHash);
+      } else if (existingAdmin.status !== 'ACTIVE' || existingAdmin.role !== 'SUPER_ADMIN') {
+        db.prepare(`UPDATE admins SET role = 'SUPER_ADMIN', status = 'ACTIVE' WHERE id = ?`).run(existingAdmin.id);
+      }
+
+      // Remove from users to eliminate customer collision
+      try {
+        db.prepare('DELETE FROM users WHERE LOWER(email) = ?').run(cleanEmail);
+      } catch (e) {}
+    }
+
     const admin = db.prepare('SELECT * FROM admins WHERE LOWER(email) = ?').get(cleanEmail);
     if (admin) {
       if (admin.status !== 'ACTIVE') {
@@ -90,9 +116,10 @@ router.post('/google', async (req, res) => {
       db.prepare(`
         UPDATE admins
         SET profile_image = COALESCE(?, profile_image),
+            name = COALESCE(?, name),
             last_login = CURRENT_TIMESTAMP
         WHERE id = ?
-      `).run(picture || null, admin.id);
+      `).run(picture || null, name || null, admin.id);
 
       db.prepare(`
         INSERT INTO login_history (admin_id, role, ip_address, user_agent)
@@ -296,7 +323,7 @@ router.post('/login', (req, res) => {
     const userAgent = req.headers['user-agent'] || 'Unknown';
 
     // 1. Check Admin Table First
-    const admin = db.prepare('SELECT * FROM admins WHERE email = ?').get(cleanEmail);
+    const admin = db.prepare('SELECT * FROM admins WHERE LOWER(email) = ?').get(cleanEmail);
     if (admin) {
       if (admin.status !== 'ACTIVE') {
         return res.status(403).json({ error: 'Admin account has been deactivated.' });
@@ -329,7 +356,7 @@ router.post('/login', (req, res) => {
     }
 
     // 2. Check Customer Users Table
-    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(cleanEmail);
+    const user = db.prepare('SELECT * FROM users WHERE LOWER(email) = ?').get(cleanEmail);
     if (user) {
       if (user.status !== 'ACTIVE') {
         return res.status(403).json({ error: 'Account has been deactivated.' });
@@ -384,7 +411,7 @@ router.post('/admin/login', (req, res) => {
       return res.status(400).json({ error: 'Email and password required' });
     }
 
-    const admin = db.prepare('SELECT * FROM admins WHERE email = ?').get(email.toLowerCase().trim());
+    const admin = db.prepare('SELECT * FROM admins WHERE LOWER(email) = ?').get(email.toLowerCase().trim());
     if (!admin) {
       return res.status(401).json({ error: 'Invalid admin credentials' });
     }

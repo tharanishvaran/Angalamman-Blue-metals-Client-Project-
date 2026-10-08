@@ -205,30 +205,37 @@ function initDatabase() {
     // Column already exists
   }
 
-  // Seed / Ensure angalammanbluemetalspondy@gmail.com is Super Admin
-  const targetAdminEmail = 'angalammanbluemetalspondy@gmail.com';
-  const existingTargetAdmin = db.prepare('SELECT id FROM admins WHERE LOWER(email) = ?').get(targetAdminEmail.toLowerCase());
+  // Seed / Ensure angalammanbluemetalspondy@gmail.com & sriangalammanbluemetalspondy@gmail.com are Super Admins
+  const targetAdminEmails = [
+    'angalammanbluemetalspondy@gmail.com',
+    'sriangalammanbluemetalspondy@gmail.com'
+  ];
   const adminSalt = bcrypt.genSaltSync(10);
   const defaultAdminPassHash = bcrypt.hashSync('Admin@1234', adminSalt);
 
-  if (!existingTargetAdmin) {
-    db.prepare(`
-      INSERT INTO admins (name, email, password_hash, role, status)
-      VALUES (?, ?, ?, 'SUPER_ADMIN', 'ACTIVE')
-    `).run('Sri Angalamman Admin', targetAdminEmail.toLowerCase(), defaultAdminPassHash);
-    console.log(`✅ Admin account initialized: ${targetAdminEmail} / Admin@1234`);
-  } else {
-    db.prepare(`
-      UPDATE admins
-      SET role = 'SUPER_ADMIN', status = 'ACTIVE'
-      WHERE id = ?
-    `).run(existingTargetAdmin.id);
-  }
+  for (const email of targetAdminEmails) {
+    const cleanEmail = email.toLowerCase().trim();
+    const existingTargetAdmin = db.prepare('SELECT id FROM admins WHERE LOWER(email) = ?').get(cleanEmail);
 
-  // Remove from customers users table to prevent collision
-  try {
-    db.prepare('DELETE FROM users WHERE LOWER(email) = ?').run(targetAdminEmail.toLowerCase());
-  } catch (e) {}
+    if (!existingTargetAdmin) {
+      db.prepare(`
+        INSERT INTO admins (name, email, password_hash, role, status)
+        VALUES (?, ?, ?, 'SUPER_ADMIN', 'ACTIVE')
+      `).run('Sri Angalamman Admin', cleanEmail, defaultAdminPassHash);
+      console.log(`✅ Admin account initialized: ${cleanEmail} / Admin@1234`);
+    } else {
+      db.prepare(`
+        UPDATE admins
+        SET role = 'SUPER_ADMIN', status = 'ACTIVE'
+        WHERE id = ?
+      `).run(existingTargetAdmin.id);
+    }
+
+    // Remove from customers users table to prevent collision
+    try {
+      db.prepare('DELETE FROM users WHERE LOWER(email) = ?').run(cleanEmail);
+    } catch (e) {}
+  }
 
   // Seed default Super Admin fallback if admins table is empty
   const adminCount = db.prepare('SELECT COUNT(*) as count FROM admins').get();

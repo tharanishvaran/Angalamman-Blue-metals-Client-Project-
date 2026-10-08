@@ -20,13 +20,28 @@ import { api } from '../api';
 
 export default function CustomerDashboard({ 
   user, 
+  admin,
   onClose, 
+  onOpenAdminPortal,
   onOpenQuote, 
   onOpenDelivery, 
   onViewInvoice, 
   onProfileUpdated,
   onLogout
 }) {
+  const ADMIN_EMAILS = [
+    'angalammanbluemetalspondy@gmail.com',
+    'sriangalammanbluemetalspondy@gmail.com',
+    'admin@angalamman.com'
+  ];
+  const isAccountAdmin = Boolean(
+    admin ||
+    user?.role === 'SUPER_ADMIN' ||
+    user?.role === 'ADMIN' ||
+    ADMIN_EMAILS.includes((user?.email || '').toLowerCase().trim()) ||
+    ADMIN_EMAILS.includes((admin?.email || '').toLowerCase().trim())
+  );
+
   const [activeTab, setActiveTab] = useState('deliveries'); // 'deliveries', 'quotes', 'invoices', 'profile'
   const [quotes, setQuotes] = useState([]);
   const [deliveries, setDeliveries] = useState([]);
@@ -169,6 +184,64 @@ export default function CustomerDashboard({
     }}>
       <div className="container" style={{ maxWidth: '1200px' }}>
         
+        {/* Admin Quick Switcher Banner (Shown if current user has admin privileges) */}
+        {isAccountAdmin && onOpenAdminPortal && (
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(220, 38, 38, 0.18) 0%, rgba(153, 27, 27, 0.28) 100%)',
+            border: '1px solid rgba(239, 68, 68, 0.4)',
+            borderRadius: '16px',
+            padding: '1rem 1.5rem',
+            backdropFilter: 'blur(16px)',
+            marginBottom: '1.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '1rem',
+            boxShadow: '0 8px 24px rgba(220, 38, 38, 0.15)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+              <div style={{
+                width: '38px',
+                height: '38px',
+                borderRadius: '10px',
+                background: '#dc2626',
+                color: '#fff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <ShieldCheck size={22} />
+              </div>
+              <div>
+                <div style={{ color: '#fff', fontWeight: 800, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span>Administrator Account Detected</span>
+                  <span style={{ fontSize: '0.65rem', background: '#dc2626', color: '#fff', padding: '0.1rem 0.4rem', borderRadius: '4px', fontWeight: 800 }}>SUPER ADMIN</span>
+                </div>
+                <div style={{ color: '#fca5a5', fontSize: '0.82rem', marginTop: '0.15rem' }}>
+                  {user?.email || admin?.email} is registered with administrative privileges. You can manage materials, deliveries, quotes, and customer accounts in the Admin Portal.
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={onOpenAdminPortal}
+              className="btn btn-primary"
+              style={{
+                background: 'linear-gradient(135deg, #dc2626, #b91c1c)',
+                borderColor: '#ef4444',
+                fontWeight: 700,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+                boxShadow: '0 4px 14px rgba(220, 38, 38, 0.4)'
+              }}
+            >
+              <ShieldCheck size={16} /> Open Admin Portal →
+            </button>
+          </div>
+        )}
+
         {/* Top Header Card */}
         <div style={{
           background: 'rgba(13, 22, 42, 0.85)',
@@ -192,7 +265,7 @@ export default function CustomerDashboard({
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
                   <h1 style={{ fontSize: '1.75rem', color: '#fff', fontWeight: 800, margin: 0 }}>
-                    {user?.name || 'Valued Customer'}
+                    {user?.name || admin?.name || 'Valued Customer'}
                   </h1>
                   <span style={{
                     fontSize: '0.72rem',
@@ -201,25 +274,38 @@ export default function CustomerDashboard({
                     letterSpacing: '0.05em',
                     padding: '0.2rem 0.6rem',
                     borderRadius: '9999px',
-                    background: 'rgba(16, 185, 129, 0.18)',
-                    color: '#34d399',
-                    border: '1px solid rgba(16, 185, 129, 0.35)',
+                    background: isAccountAdmin ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.18)',
+                    color: isAccountAdmin ? '#f87171' : '#34d399',
+                    border: isAccountAdmin ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid rgba(16, 185, 129, 0.35)',
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '0.3rem'
                   }}>
-                    <ShieldCheck size={12} /> Verified Customer
+                    <ShieldCheck size={12} /> {isAccountAdmin ? 'Admin Account' : 'Verified Customer'}
                   </span>
                 </div>
                 <div style={{ fontSize: '0.88rem', color: '#94a3b8', marginTop: '0.25rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                  <span>{user?.email}</span>
-                  {user?.mobile && <span>• +91 {user.mobile}</span>}
+                  <span>{user?.email || admin?.email}</span>
+                  {(user?.mobile || admin?.mobile) && <span>• +91 {user?.mobile || admin?.mobile}</span>}
                 </div>
               </div>
             </div>
 
             {/* Quick Navigation Buttons */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              {isAccountAdmin && onOpenAdminPortal && (
+                <button
+                  onClick={onOpenAdminPortal}
+                  className="btn btn-primary btn-sm"
+                  style={{
+                    background: 'linear-gradient(135deg, #dc2626, #b91c1c)',
+                    borderColor: '#ef4444',
+                    fontWeight: 700
+                  }}
+                >
+                  <ShieldCheck size={15} /> Admin Portal
+                </button>
+              )}
               <button 
                 onClick={onOpenQuote} 
                 className="btn btn-outline btn-sm"

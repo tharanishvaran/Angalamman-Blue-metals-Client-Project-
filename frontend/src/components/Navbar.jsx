@@ -229,7 +229,144 @@ export default function Navbar({
           </button>
 
           {/* User Account / Login */}
-          {user ? (
+          {admin ? (
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+                className="btn btn-outline btn-sm"
+                style={{ 
+                  borderRadius: '9999px', 
+                  padding: '0.35rem 0.8rem', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '0.5rem',
+                  borderColor: 'rgba(239, 68, 68, 0.45)',
+                  background: 'rgba(239, 68, 68, 0.1)'
+                }}
+              >
+                {admin.profile_image ? (
+                  <img 
+                    src={admin.profile_image} 
+                    alt={admin.name} 
+                    referrerPolicy="no-referrer"
+                    crossOrigin="anonymous"
+                    style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover' }} 
+                  />
+                ) : (
+                  <div style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #dc2626, #b91c1c)',
+                    color: '#fff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '0.75rem',
+                    fontWeight: 700
+                  }}>
+                    <ShieldCheck size={14} />
+                  </div>
+                )}
+                <span style={{ maxWidth: '110px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                  {admin.name ? admin.name.split(' ')[0] : 'Admin'}
+                </span>
+                <span style={{ fontSize: '0.62rem', background: '#dc2626', color: '#fff', padding: '0.1rem 0.4rem', borderRadius: '9999px', fontWeight: 700 }}>
+                  ADMIN
+                </span>
+                <ChevronDown size={14} />
+              </button>
+
+              {userDropdownOpen && (
+                <div 
+                  style={{
+                    position: 'absolute',
+                    top: '120%',
+                    right: 0,
+                    width: '240px',
+                    background: '#0d172a',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    borderRadius: '12px',
+                    padding: '0.5rem',
+                    boxShadow: '0 12px 30px rgba(0, 0, 0, 0.7)',
+                    zIndex: 1100
+                  }}
+                >
+                  <div style={{ padding: '0.6rem', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    {admin.profile_image ? (
+                      <img 
+                        src={admin.profile_image} 
+                        alt={admin.name} 
+                        referrerPolicy="no-referrer"
+                        crossOrigin="anonymous"
+                        style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }} 
+                      />
+                    ) : (
+                      <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#dc2626', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <ShieldCheck size={18} />
+                      </div>
+                    )}
+                    <div style={{ overflow: 'hidden' }}>
+                      <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#fff', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>{admin.name || 'Administrator'}</div>
+                      <div style={{ fontSize: '0.72rem', color: '#94a3b8', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>{admin.email}</div>
+                      <span style={{ fontSize: '0.62rem', background: 'rgba(239, 68, 68, 0.2)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.4)', padding: '0.05rem 0.35rem', borderRadius: '4px', fontWeight: 700, marginTop: '0.2rem', display: 'inline-block' }}>
+                        {admin.role || 'SUPER_ADMIN'}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setUserDropdownOpen(false);
+                      onOpenAdminPortal();
+                    }}
+                    style={{
+                      width: '100%',
+                      textAlign: 'left',
+                      background: 'rgba(37, 99, 235, 0.15)',
+                      border: '1px solid rgba(37, 99, 235, 0.35)',
+                      color: '#60a5fa',
+                      padding: '0.6rem 0.75rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      borderRadius: '6px',
+                      marginTop: '0.4rem'
+                    }}
+                  >
+                    <ShieldCheck size={16} /> Open Admin Portal
+                  </button>
+                  <button
+                    onClick={() => {
+                      setUserDropdownOpen(false);
+                      onLogout();
+                    }}
+                    style={{
+                      width: '100%',
+                      textAlign: 'left',
+                      background: 'none',
+                      border: 'none',
+                      color: '#f87171',
+                      padding: '0.5rem 0.75rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      fontSize: '0.85rem',
+                      cursor: 'pointer',
+                      borderRadius: '6px',
+                      marginTop: '0.25rem'
+                    }}
+                    onMouseEnter={(e) => (e.target.style.background = 'rgba(239, 68, 68, 0.1)')}
+                    onMouseLeave={(e) => (e.target.style.background = 'none')}
+                  >
+                    <LogOut size={15} /> Logout
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : user ? (
             <div style={{ position: 'relative' }}>
               <button
                 onClick={() => setUserDropdownOpen(!userDropdownOpen)}
@@ -368,7 +505,7 @@ export default function Navbar({
             </button>
           )}
 
-          {/* Admin Portal Button (Only shown if currently authenticated as admin) */}
+          {/* Admin Portal Quick Button (if admin is authenticated) */}
           {admin && (
             <button
               onClick={onOpenAdminPortal}
@@ -377,7 +514,7 @@ export default function Navbar({
               title="Admin Portal"
             >
               <ShieldCheck size={16} />
-              <span>Admin</span>
+              <span>Admin Portal</span>
             </button>
           )}
 
@@ -463,7 +600,65 @@ export default function Navbar({
           </div>
 
           <div style={{ paddingTop: '0.5rem', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
-            {user ? (
+            {admin ? (
+              <div>
+                <div style={{
+                  padding: '0.65rem 0.85rem',
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: '10px',
+                  marginBottom: '0.6rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.6rem'
+                }}>
+                  <div style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    background: '#dc2626',
+                    color: '#fff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}>
+                    <ShieldCheck size={18} />
+                  </div>
+                  <div style={{ overflow: 'hidden' }}>
+                    <div style={{ color: '#fff', fontWeight: 700, fontSize: '0.88rem', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+                      {admin.name || 'Admin'}
+                    </div>
+                    <div style={{ color: '#94a3b8', fontSize: '0.72rem', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+                      {admin.email}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      onOpenAdminPortal();
+                    }}
+                    className="btn btn-primary"
+                    style={{ flex: 1, justifyContent: 'center', fontWeight: 700 }}
+                  >
+                    <ShieldCheck size={16} /> Open Admin Portal
+                  </button>
+                  <button
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      onLogout();
+                    }}
+                    className="btn btn-outline"
+                    style={{ borderColor: 'rgba(239, 68, 68, 0.3)', color: '#f87171' }}
+                    title="Sign Out"
+                  >
+                    <LogOut size={16} />
+                  </button>
+                </div>
+              </div>
+            ) : user ? (
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button
                   onClick={() => {
@@ -496,26 +691,6 @@ export default function Navbar({
                 style={{ width: '100%', justifyContent: 'center' }}
               >
                 <User size={16} /> Sign In / Register
-              </button>
-            )}
-
-            {admin && (
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  onOpenAdminPortal();
-                }}
-                className="btn btn-outline"
-                style={{
-                  width: '100%',
-                  justifyContent: 'center',
-                  marginTop: '0.5rem',
-                  borderColor: 'rgba(37, 99, 235, 0.45)',
-                  color: '#60a5fa',
-                  background: 'rgba(37, 99, 235, 0.1)'
-                }}
-              >
-                <ShieldCheck size={16} /> Open Admin Control
               </button>
             )}
           </div>

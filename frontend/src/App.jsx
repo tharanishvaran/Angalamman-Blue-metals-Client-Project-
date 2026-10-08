@@ -54,15 +54,44 @@ export default function App() {
   // Invoice Viewer Modal
   const [viewingInvoice, setViewingInvoice] = useState(null);
 
+  const ADMIN_EMAILS = [
+    'angalammanbluemetalspondy@gmail.com',
+    'sriangalammanbluemetalspondy@gmail.com',
+    'admin@angalamman.com'
+  ];
+
   useEffect(() => {
     // Check saved session
     const savedUser = localStorage.getItem('angalamman_user');
     const savedAdmin = localStorage.getItem('angalamman_admin');
+    let parsedUser = null;
+    let parsedAdmin = null;
+
     if (savedUser) {
-      try { setUser(JSON.parse(savedUser)); } catch (e) {}
+      try { parsedUser = JSON.parse(savedUser); } catch (e) {}
     }
     if (savedAdmin) {
-      try { setAdmin(JSON.parse(savedAdmin)); } catch (e) {}
+      try { parsedAdmin = JSON.parse(savedAdmin); } catch (e) {}
+    }
+
+    // Auto-migrate if savedUser belongs to an admin
+    if (parsedUser && (
+      parsedUser.role === 'SUPER_ADMIN' ||
+      parsedUser.role === 'ADMIN' ||
+      ADMIN_EMAILS.includes((parsedUser.email || '').toLowerCase().trim())
+    )) {
+      parsedAdmin = { ...parsedUser, role: parsedUser.role || 'SUPER_ADMIN' };
+      parsedUser = null;
+      localStorage.setItem('angalamman_admin', JSON.stringify(parsedAdmin));
+      localStorage.removeItem('angalamman_user');
+    }
+
+    if (parsedAdmin) {
+      setAdmin(parsedAdmin);
+      setUser(null);
+    } else if (parsedUser) {
+      setUser(parsedUser);
+      setAdmin(null);
     }
 
     loadInitialData();
@@ -98,11 +127,28 @@ export default function App() {
   const [authBannerMessage, setAuthBannerMessage] = useState('');
 
   const handleLoginSuccess = (accountData, isAdmin) => {
-    if (isAdmin) {
-      setAdmin(accountData);
+    const isActuallyAdmin = Boolean(
+      isAdmin ||
+      accountData?.role === 'SUPER_ADMIN' ||
+      accountData?.role === 'ADMIN' ||
+      ADMIN_EMAILS.includes((accountData?.email || '').toLowerCase().trim())
+    );
+
+    if (isActuallyAdmin) {
+      const adminData = {
+        ...accountData,
+        role: accountData.role || 'SUPER_ADMIN'
+      };
+      setAdmin(adminData);
+      setUser(null);
+      localStorage.setItem('angalamman_admin', JSON.stringify(adminData));
+      localStorage.removeItem('angalamman_user');
       setActiveView('admin-portal');
     } else {
       setUser(accountData);
+      setAdmin(null);
+      localStorage.setItem('angalamman_user', JSON.stringify(accountData));
+      localStorage.removeItem('angalamman_admin');
       if (pendingAction) {
         const action = pendingAction;
         setPendingAction(null);
@@ -125,12 +171,14 @@ export default function App() {
     api.logout();
     setUser(null);
     setAdmin(null);
+    localStorage.removeItem('angalamman_user');
+    localStorage.removeItem('angalamman_admin');
     setActiveView('home');
   };
 
   // Triggers for modals with pre-selected material (requires login before booking)
   const handleOpenQuoteWithMaterial = (materialName = '') => {
-    if (!user) {
+    if (!user && !admin) {
       setPendingAction({ type: 'quote', material: materialName });
       setAuthBannerMessage('Please sign in with Google or Email to request an official quotation');
       setAuthModalOpen(true);
@@ -141,7 +189,7 @@ export default function App() {
   };
 
   const handleOpenDeliveryWithMaterial = (materialName = '') => {
-    if (!user) {
+    if (!user && !admin) {
       setPendingAction({ type: 'delivery', material: materialName });
       setAuthBannerMessage('Please sign in with Google or Email to book material delivery');
       setAuthModalOpen(true);
@@ -168,11 +216,13 @@ export default function App() {
           onViewInvoice={(inv) => setViewingInvoice(inv)}
           onDataUpdated={() => loadInitialData()}
         />
-      ) : activeView === 'customer-dashboard' && user ? (
+      ) : activeView === 'customer-dashboard' && (user || admin) ? (
         /* View 2: Customer Dashboard */
         <CustomerDashboard
           user={user}
+          admin={admin}
           onClose={() => setActiveView('home')}
+          onOpenAdminPortal={() => setActiveView('admin-portal')}
           onOpenQuote={() => handleOpenQuoteWithMaterial()}
           onOpenDelivery={() => handleOpenDeliveryWithMaterial()}
           onViewInvoice={(inv) => setViewingInvoice(inv)}
