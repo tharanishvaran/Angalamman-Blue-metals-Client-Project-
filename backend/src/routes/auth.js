@@ -6,9 +6,8 @@ const { OAuth2Client } = require('google-auth-library');
 const db = require('../db');
 const { authenticate, JWT_SECRET } = require('../middleware/auth');
 
-const googleClient = process.env.GOOGLE_CLIENT_ID
-  ? new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
-  : null;
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '547111778244-o780h96i0cvr63k5ubhuasmk53k13a40.apps.googleusercontent.com';
+const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 // Validate 10-digit Indian mobile number
 function isValidIndianMobile(mobile) {
@@ -37,7 +36,7 @@ router.post('/google', async (req, res) => {
         try {
           const ticket = await googleClient.verifyIdToken({
             idToken: credential,
-            audience: process.env.GOOGLE_CLIENT_ID
+            audience: GOOGLE_CLIENT_ID
           });
           const payload = ticket.getPayload();
           googleId = payload.sub;

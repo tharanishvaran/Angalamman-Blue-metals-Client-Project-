@@ -3,7 +3,7 @@ import { User, Phone, ShieldCheck, X, CheckCircle2, Lock, Mail, AlertCircle, Spa
 import { GoogleLogin } from '@react-oauth/google';
 import { api } from '../api';
 
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '547111778244-o780h96i0cvr63k5ubhuasmk53k13a40.apps.googleusercontent.com';
 
 export default function AuthModal({ 
   isOpen, 
@@ -176,20 +176,24 @@ export default function AuthModal({
               </p>
             </div>
 
-            {/* Official Google OAuth component if Client ID is configured */}
-            {GOOGLE_CLIENT_ID ? (
-              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem', width: '100%' }}>
-                <GoogleLogin
-                  onSuccess={(credentialResponse) => handleGoogleAuthToken(credentialResponse.credential)}
-                  onError={() => alert('Google Sign In failed. Please try again.')}
-                  theme="filled_blue"
-                  size="large"
-                  shape="pill"
-                  width="100%"
-                  text="continue_with"
-                />
-              </div>
-            ) : null}
+            {/* Official Google Sign-In Button */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem', width: '100%' }}>
+              <GoogleLogin
+                onSuccess={(credentialResponse) => handleGoogleAuthToken(credentialResponse.credential)}
+                onError={() => alert('Google Sign In failed. Please try again.')}
+                theme="outline"
+                size="large"
+                shape="pill"
+                text="continue_with"
+                width="340"
+              />
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', margin: '1rem 0' }}>
+              <div style={{ flex: 1, height: '1px', background: 'rgba(255, 255, 255, 0.1)' }} />
+              <span style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>or sign in with email</span>
+              <div style={{ flex: 1, height: '1px', background: 'rgba(255, 255, 255, 0.1)' }} />
+            </div>
 
             {/* Google OAuth One-Click Button */}
             <button
