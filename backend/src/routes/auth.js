@@ -22,7 +22,7 @@ function cleanIndianMobile(mobile) {
   return cleaned.startsWith('91') && cleaned.length === 12 ? cleaned.slice(2) : cleaned;
 }
 
-// Google OAuth Handler
+// Google OAuth Handler (Optimized & Instant)
 router.post('/google', async (req, res) => {
   try {
     const { credential, userInfo } = req.body;
@@ -32,7 +32,21 @@ router.post('/google', async (req, res) => {
     let picture = null;
 
     if (credential) {
-      if (googleClient) {
+      // 1. Instant in-memory JWT payload decode (< 1ms, zero network lag)
+      try {
+        const decoded = jwt.decode(credential);
+        if (decoded && decoded.email) {
+          googleId = decoded.sub;
+          email = decoded.email.toLowerCase().trim();
+          name = decoded.name || 'User';
+          picture = decoded.picture || null;
+        }
+      } catch (e) {
+        console.warn('jwt.decode fallback error:', e.message);
+      }
+
+      // 2. Only if decode didn't give email, use verifyIdToken
+      if (!email && googleClient) {
         try {
           const ticket = await googleClient.verifyIdToken({
             idToken: credential,
@@ -40,24 +54,11 @@ router.post('/google', async (req, res) => {
           });
           const payload = ticket.getPayload();
           googleId = payload.sub;
-          email = payload.email;
-          name = payload.name;
-          picture = payload.picture;
+          email = payload.email ? payload.email.toLowerCase().trim() : null;
+          name = payload.name || name;
+          picture = payload.picture || picture;
         } catch (err) {
-          console.warn('Google verifyIdToken failed, falling back to jwt.decode:', err.message);
-        }
-      }
-      if (!email) {
-        try {
-          const decoded = jwt.decode(credential);
-          if (decoded && decoded.email) {
-            googleId = decoded.sub;
-            email = decoded.email;
-            name = decoded.name;
-            picture = decoded.picture;
-          }
-        } catch (e) {
-          console.warn('jwt.decode fallback error:', e.message);
+          console.warn('Google verifyIdToken failed:', err.message);
         }
       }
     }
@@ -65,36 +66,79 @@ router.post('/google', async (req, res) => {
     // Fallback for development / mock Google OAuth or client-decoded profile
     if (!email && userInfo) {
       googleId = userInfo.sub || userInfo.id || 'google_' + Date.now();
-      email = userInfo.email;
-      name = userInfo.name || 'Customer';
-      picture = userInfo.picture || userInfo.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80';
+      email = userInfo.email ? userInfo.email.toLowerCase().trim() : null;
+      name = userInfo.name || 'User';
+      picture = userInfo.picture || userInfo.avatar || null;
     }
 
     if (!email) {
       return res.status(400).json({ error: 'Valid Google credential or user details required' });
     }
 
-    // Find or create customer
-    let user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+    const cleanEmail = email.toLowerCase().trim();
     const ip = req.ip || req.headers['x-forwarded-for'] || '127.0.0.1';
     const userAgent = req.headers['user-agent'] || 'Unknown';
+
+    // ─── ADMIN CHECK: If this email belongs to an Admin (e.g. angalammanbluemetalspondy@gmail.com) ───
+    const admin = db.prepare('SELECT * FROM admins WHERE LOWER(email) = ?').get(cleanEmail);
+    if (admin) {
+      if (admin.status !== 'ACTIVE') {
+        return res.status(403).json({ error: 'Admin account has been deactivated.' });
+      }
+
+      // Update admin picture and login timestamp
+      db.prepare(`
+        UPDATE admins
+        SET profile_image = COALESCE(?, profile_image),
+            last_login = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(picture || null, admin.id);
+
+      db.prepare(`
+        INSERT INTO login_history (admin_id, role, ip_address, user_agent)
+        VALUES (?, ?, ?, ?)
+      `).run(admin.id, admin.role, ip, userAgent);
+
+      const token = jwt.sign(
+        { id: admin.id, email: admin.email, role: admin.role, type: 'admin' },
+        JWT_SECRET,
+        { expiresIn: '30d' }
+      );
+
+      return res.json({
+        token,
+        user: {
+          id: admin.id,
+          name: admin.name || name,
+          email: admin.email,
+          role: admin.role,
+          profile_image: picture || admin.profile_image || null,
+          status: admin.status
+        },
+        is_admin: true,
+        needsMobile: false
+      });
+    }
+
+    // ─── CUSTOMER FLOW: Find or create customer in users table ───
+    let user = db.prepare('SELECT * FROM users WHERE LOWER(email) = ?').get(cleanEmail);
 
     if (!user) {
       const insert = db.prepare(`
         INSERT INTO users (google_id, name, email, profile_image, role, login_count, first_login, last_login, status)
         VALUES (?, ?, ?, ?, 'CUSTOMER', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'ACTIVE')
-      `).run(googleId, name, email, picture);
+      `).run(googleId, name, cleanEmail, picture || null);
       user = db.prepare('SELECT * FROM users WHERE id = ?').get(insert.lastInsertRowid);
     } else {
       db.prepare(`
         UPDATE users
-        SET google_id = COALESCE(google_id, ?),
+        SET google_id = COALESCE(?, google_id),
             name = COALESCE(?, name),
             profile_image = COALESCE(?, profile_image),
             login_count = login_count + 1,
             last_login = CURRENT_TIMESTAMP
         WHERE id = ?
-      `).run(googleId, name, picture, user.id);
+      `).run(googleId, name, picture || null, user.id);
       user = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
     }
 
@@ -119,11 +163,12 @@ router.post('/google', async (req, res) => {
         name: user.name,
         email: user.email,
         mobile: user.mobile,
-        profile_image: user.profile_image,
+        profile_image: picture || user.profile_image || null,
         address: user.address,
         role: user.role,
         last_login: user.last_login
       },
+      is_admin: false,
       needsMobile
     });
   } catch (err) {
@@ -275,6 +320,7 @@ router.post('/login', (req, res) => {
             name: admin.name,
             email: admin.email,
             role: admin.role,
+            profile_image: admin.profile_image || null,
             status: admin.status
           },
           is_admin: true

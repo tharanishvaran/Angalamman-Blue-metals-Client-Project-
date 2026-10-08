@@ -199,15 +199,44 @@ function initDatabase() {
     // Column already exists or already migrated
   }
 
-  // Seed default Super Admin if none exists
-  const adminCount = db.prepare('SELECT COUNT(*) as count FROM admins').get();
-  if (adminCount.count === 0) {
-    const salt = bcrypt.genSaltSync(10);
-    const hash = bcrypt.hashSync('Admin@1234', salt);
+  try {
+    db.prepare('ALTER TABLE admins ADD COLUMN profile_image TEXT').run();
+  } catch (e) {
+    // Column already exists
+  }
+
+  // Seed / Ensure angalammanbluemetalspondy@gmail.com is Super Admin
+  const targetAdminEmail = 'angalammanbluemetalspondy@gmail.com';
+  const existingTargetAdmin = db.prepare('SELECT id FROM admins WHERE LOWER(email) = ?').get(targetAdminEmail.toLowerCase());
+  const adminSalt = bcrypt.genSaltSync(10);
+  const defaultAdminPassHash = bcrypt.hashSync('Admin@1234', adminSalt);
+
+  if (!existingTargetAdmin) {
     db.prepare(`
       INSERT INTO admins (name, email, password_hash, role, status)
-      VALUES (?, ?, ?, ?, ?)
-    `).run('Sri Angalamman Administrator', 'admin@angalamman.com', hash, 'SUPER_ADMIN', 'ACTIVE');
+      VALUES (?, ?, ?, 'SUPER_ADMIN', 'ACTIVE')
+    `).run('Sri Angalamman Admin', targetAdminEmail.toLowerCase(), defaultAdminPassHash);
+    console.log(`✅ Admin account initialized: ${targetAdminEmail} / Admin@1234`);
+  } else {
+    db.prepare(`
+      UPDATE admins
+      SET role = 'SUPER_ADMIN', status = 'ACTIVE'
+      WHERE id = ?
+    `).run(existingTargetAdmin.id);
+  }
+
+  // Remove from customers users table to prevent collision
+  try {
+    db.prepare('DELETE FROM users WHERE LOWER(email) = ?').run(targetAdminEmail.toLowerCase());
+  } catch (e) {}
+
+  // Seed default Super Admin fallback if admins table is empty
+  const adminCount = db.prepare('SELECT COUNT(*) as count FROM admins').get();
+  if (adminCount.count === 0) {
+    db.prepare(`
+      INSERT INTO admins (name, email, password_hash, role, status)
+      VALUES (?, ?, ?, 'SUPER_ADMIN', 'ACTIVE')
+    `).run('Sri Angalamman Administrator', 'admin@angalamman.com', defaultAdminPassHash);
     console.log('✅ Default Super Admin created: admin@angalamman.com / Admin@1234');
   }
 

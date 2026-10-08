@@ -1,9 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { User, Phone, X, CheckCircle2, Lock, Mail, Eye, EyeOff, Sparkles, UserPlus, LogIn } from 'lucide-react';
 import { GoogleLogin } from '@react-oauth/google';
 import { api } from '../api';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '547111778244-o780h96i0cvr63k5ubhuasmk53k13a40.apps.googleusercontent.com';
+
+// Isolated and memoized so typing in form inputs never re-renders Google's OAuth iframe
+const MemoizedGoogleButton = React.memo(function MemoizedGoogleButton({ onAuth, onError }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', width: '100%', maxWidth: '340px' }}>
+      <GoogleLogin
+        onSuccess={(credentialResponse) => onAuth(credentialResponse.credential)}
+        onError={onError}
+        theme="outline"
+        size="large"
+        shape="pill"
+        text="continue_with"
+        width="300"
+        logo_alignment="left"
+      />
+    </div>
+  );
+});
 
 export default function AuthModal({ 
   isOpen, 
@@ -37,8 +55,6 @@ export default function AuthModal({
   const [generalError, setGeneralError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  if (!isOpen) return null;
-
   // Indian mobile validation helper
   const isValidMobile = (num) => {
     const cleaned = (num || '').replace(/[\s\-\+]/g, '');
@@ -50,21 +66,7 @@ export default function AuthModal({
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((email || '').trim());
   };
 
-  // 1. Google OAuth Token Handler
-  const handleGoogleAuthToken = async (credential) => {
-    try {
-      setLoading(true);
-      setGeneralError('');
-      const res = await api.googleLogin(credential);
-      handlePostLogin(res);
-    } catch (err) {
-      setGeneralError(err.message || 'Google sign-in failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handlePostLogin = (res) => {
+  const handlePostLogin = useCallback((res) => {
     localStorage.setItem('angalamman_token', res.token);
 
     if (res.is_admin) {
@@ -83,7 +85,21 @@ export default function AuthModal({
       onLoginSuccess(res.user, false);
       onClose();
     }
-  };
+  }, [onLoginSuccess, onClose]);
+
+  // 1. Google OAuth Token Handler (Instant)
+  const handleGoogleAuthToken = useCallback(async (credential) => {
+    try {
+      setLoading(true);
+      setGeneralError('');
+      const res = await api.googleLogin(credential);
+      handlePostLogin(res);
+    } catch (err) {
+      setGeneralError(err.message || 'Google sign-in failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, [handlePostLogin]);
 
   // 2. Sign In Handler
   const handleSignInSubmit = async (e) => {
@@ -181,6 +197,8 @@ export default function AuthModal({
     }
   };
 
+  if (!isOpen) return null;
+
   return (
     <div className="modal-overlay" onClick={onClose} style={{ zIndex: 9999, padding: '0.75rem' }}>
       <div 
@@ -269,20 +287,12 @@ export default function AuthModal({
               </div>
             )}
 
-            {/* OPTION 1: Continue with Google (Original Google OAuth) */}
+            {/* OPTION 1: Continue with Google (Original Google OAuth - Memoized for zero typing lag) */}
             <div style={{ marginBottom: '1.25rem', width: '100%', display: 'flex', justifyContent: 'center' }}>
-              <div style={{ display: 'flex', justifyContent: 'center', width: '100%', maxWidth: '340px' }}>
-                <GoogleLogin
-                  onSuccess={(credentialResponse) => handleGoogleAuthToken(credentialResponse.credential)}
-                  onError={() => setGeneralError('Google Sign-In was cancelled or failed.')}
-                  theme="outline"
-                  size="large"
-                  shape="pill"
-                  text="continue_with"
-                  width="300"
-                  logo_alignment="left"
-                />
-              </div>
+              <MemoizedGoogleButton
+                onAuth={handleGoogleAuthToken}
+                onError={() => setGeneralError('Google Sign-In was cancelled or failed.')}
+              />
             </div>
 
             {/* Divider */}
@@ -367,7 +377,7 @@ export default function AuthModal({
                       value={signInEmail}
                       onChange={(e) => {
                         setSignInEmail(e.target.value);
-                        setErrors(prev => ({ ...prev, email: '' }));
+                        if (errors.email) setErrors(prev => ({ ...prev, email: '' }));
                       }}
                     />
                   </div>
@@ -387,7 +397,7 @@ export default function AuthModal({
                       value={signInPassword}
                       onChange={(e) => {
                         setSignInPassword(e.target.value);
-                        setErrors(prev => ({ ...prev, password: '' }));
+                        if (errors.password) setErrors(prev => ({ ...prev, password: '' }));
                       }}
                     />
                     <button
@@ -439,7 +449,7 @@ export default function AuthModal({
                       value={signUpName}
                       onChange={(e) => {
                         setSignUpName(e.target.value);
-                        setErrors(prev => ({ ...prev, name: '' }));
+                        if (errors.name) setErrors(prev => ({ ...prev, name: '' }));
                       }}
                     />
                   </div>
@@ -459,7 +469,7 @@ export default function AuthModal({
                       value={signUpEmail}
                       onChange={(e) => {
                         setSignUpEmail(e.target.value);
-                        setErrors(prev => ({ ...prev, email: '' }));
+                        if (errors.email) setErrors(prev => ({ ...prev, email: '' }));
                       }}
                     />
                   </div>
@@ -482,7 +492,7 @@ export default function AuthModal({
                       value={signUpMobile}
                       onChange={(e) => {
                         setSignUpMobile(e.target.value.replace(/\D/g, ''));
-                        setErrors(prev => ({ ...prev, mobile: '' }));
+                        if (errors.mobile) setErrors(prev => ({ ...prev, mobile: '' }));
                       }}
                     />
                   </div>
@@ -502,7 +512,7 @@ export default function AuthModal({
                       value={signUpPassword}
                       onChange={(e) => {
                         setSignUpPassword(e.target.value);
-                        setErrors(prev => ({ ...prev, password: '' }));
+                        if (errors.password) setErrors(prev => ({ ...prev, password: '' }));
                       }}
                     />
                     <button
@@ -540,7 +550,7 @@ export default function AuthModal({
                       value={signUpConfirmPassword}
                       onChange={(e) => {
                         setSignUpConfirmPassword(e.target.value);
-                        setErrors(prev => ({ ...prev, confirmPassword: '' }));
+                        if (errors.confirmPassword) setErrors(prev => ({ ...prev, confirmPassword: '' }));
                       }}
                     />
                     <button

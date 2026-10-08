@@ -189,6 +189,8 @@ export default function Navbar({
                   <img 
                     src={user.profile_image} 
                     alt={user.name} 
+                    referrerPolicy="no-referrer"
+                    crossOrigin="anonymous"
                     style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover' }} 
                   />
                 ) : (
@@ -230,7 +232,13 @@ export default function Navbar({
                 >
                   <div style={{ padding: '0.6rem', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                     {user.profile_image ? (
-                      <img src={user.profile_image} alt={user.name} style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }} />
+                      <img 
+                        src={user.profile_image} 
+                        alt={user.name} 
+                        referrerPolicy="no-referrer"
+                        crossOrigin="anonymous"
+                        style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }} 
+                      />
                     ) : (
                       <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#2563eb', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700 }}>
                         {(user.name || user.email || 'U').charAt(0).toUpperCase()}

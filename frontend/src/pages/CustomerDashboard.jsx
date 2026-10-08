@@ -122,6 +122,8 @@ export default function CustomerDashboard({
         <img
           src={user.profile_image}
           alt={user.name || 'User'}
+          referrerPolicy="no-referrer"
+          crossOrigin="anonymous"
           style={{
             width: `${size}px`,
             height: `${size}px`,

@@ -369,9 +369,19 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
         {/* User Info & Logout */}
         <div style={{ padding: '1rem', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.75rem' }}>
-            <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#1e3a8a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '0.85rem', fontWeight: 700 }}>
-              {admin.name ? admin.name.charAt(0) : 'A'}
-            </div>
+            {admin?.profile_image ? (
+              <img
+                src={admin.profile_image}
+                alt={admin.name}
+                referrerPolicy="no-referrer"
+                crossOrigin="anonymous"
+                style={{ width: '34px', height: '34px', borderRadius: '50%', objectFit: 'cover' }}
+              />
+            ) : (
+              <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: '#1e3a8a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '0.85rem', fontWeight: 700 }}>
+                {admin?.name ? admin.name.charAt(0).toUpperCase() : 'A'}
+              </div>
+            )}
             <div>
               <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#fff' }}>{admin.name}</div>
               <div style={{ fontSize: '0.72rem', color: '#38bdf8' }}>{admin.role}</div>
