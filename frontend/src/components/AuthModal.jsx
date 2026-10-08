@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, Phone, ShieldCheck, X, CheckCircle2, Lock, Mail, AlertCircle, Sparkles } from 'lucide-react';
+import { User, Phone, X, CheckCircle2, Lock, Mail, Eye, EyeOff, Sparkles, UserPlus, LogIn } from 'lucide-react';
 import { GoogleLogin } from '@react-oauth/google';
 import { api } from '../api';
 
@@ -9,58 +9,56 @@ export default function AuthModal({
   isOpen, 
   onClose, 
   onLoginSuccess, 
-  initialMode = 'customer', // 'customer' or 'admin'
   bannerMessage = ''
 }) {
-  const [mode, setMode] = useState(initialMode); // 'customer', 'complete-profile', 'admin', 'google-prompt'
+  const [tab, setTab] = useState('signin'); // 'signin' or 'signup'
+  const [mode, setMode] = useState('auth'); // 'auth' or 'complete-profile'
   const [googleUser, setGoogleUser] = useState(null);
-  const [mobile, setMobile] = useState('');
-  const [mobileError, setMobileError] = useState('');
-  
-  // Custom Google profile inputs
-  const [inputEmail, setInputEmail] = useState('');
-  const [inputName, setInputName] = useState('');
-  const [emailError, setEmailError] = useState('');
 
-  // Admin credentials
-  const [adminEmail, setAdminEmail] = useState('admin@angalamman.com');
-  const [adminPassword, setAdminPassword] = useState('Admin@1234');
-  const [adminError, setAdminError] = useState('');
+  // Sign In Form
+  const [signInEmail, setSignInEmail] = useState('');
+  const [signInPassword, setSignInPassword] = useState('');
+  const [showSignInPassword, setShowSignInPassword] = useState(false);
+
+  // Sign Up Form
+  const [signUpName, setSignUpName] = useState('');
+  const [signUpEmail, setSignUpEmail] = useState('');
+  const [signUpMobile, setSignUpMobile] = useState('');
+  const [signUpPassword, setSignUpPassword] = useState('');
+  const [signUpConfirmPassword, setSignUpConfirmPassword] = useState('');
+  const [showSignUpPassword, setShowSignUpPassword] = useState(false);
+  const [showSignUpConfirm, setShowSignUpConfirm] = useState(false);
+
+  // Profile Mobile Form (Google users without phone)
+  const [profileMobile, setProfileMobile] = useState('');
+
+  // Errors & UI
+  const [errors, setErrors] = useState({});
+  const [generalError, setGeneralError] = useState('');
   const [loading, setLoading] = useState(false);
 
   if (!isOpen) return null;
 
   // Indian mobile validation helper
   const isValidMobile = (num) => {
-    const cleaned = num.replace(/[\s\-\+]/g, '');
+    const cleaned = (num || '').replace(/[\s\-\+]/g, '');
     const digits = cleaned.startsWith('91') && cleaned.length === 12 ? cleaned.slice(2) : cleaned;
     return /^[6-9]\d{9}$/.test(digits);
   };
 
-  // Process Google login token or profile
+  const isValidEmail = (email) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((email || '').trim());
+  };
+
+  // 1. Google OAuth Token Handler
   const handleGoogleAuthToken = async (credential) => {
     try {
       setLoading(true);
+      setGeneralError('');
       const res = await api.googleLogin(credential);
       handlePostLogin(res);
     } catch (err) {
-      alert(err.message || 'Google sign-in error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleGoogleSignInWithProfile = async (email, name, picture) => {
-    try {
-      setLoading(true);
-      const res = await api.googleLogin(null, {
-        email: (email || inputEmail || '').trim(),
-        name: (name || inputName || 'Valued Customer').trim(),
-        picture: picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'
-      });
-      handlePostLogin(res);
-    } catch (err) {
-      alert(err.message || 'Google sign-in error');
+      setGeneralError(err.message || 'Google sign-in failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -68,6 +66,14 @@ export default function AuthModal({
 
   const handlePostLogin = (res) => {
     localStorage.setItem('angalamman_token', res.token);
+
+    if (res.is_admin) {
+      localStorage.setItem('angalamman_admin', JSON.stringify(res.user));
+      onLoginSuccess(res.user, true);
+      onClose();
+      return;
+    }
+
     localStorage.setItem('angalamman_user', JSON.stringify(res.user));
 
     if (res.needsMobile) {
@@ -79,60 +85,120 @@ export default function AuthModal({
     }
   };
 
-  // Step 2: Complete profile with mobile number
-  const handleSaveMobile = async (e) => {
+  // 2. Sign In Handler
+  const handleSignInSubmit = async (e) => {
     e.preventDefault();
-    if (!isValidMobile(mobile)) {
-      setMobileError('Please enter a valid 10-digit Indian mobile number (starting with 6, 7, 8, or 9)');
+    setGeneralError('');
+    const newErrors = {};
+
+    if (!isValidEmail(signInEmail)) {
+      newErrors.email = 'Please enter a valid email address';
+    }
+    if (!signInPassword) {
+      newErrors.password = 'Password is required';
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
       return;
     }
-    setMobileError('');
+    setErrors({});
 
     try {
       setLoading(true);
-      const res = await api.updateProfile({ mobile });
-      localStorage.setItem('angalamman_user', JSON.stringify(res.user));
-      onLoginSuccess(res.user, false);
-      onClose();
+      const res = await api.login(signInEmail, signInPassword);
+      handlePostLogin(res);
     } catch (err) {
-      setMobileError(err.message || 'Failed to update phone number');
+      setGeneralError(err.message || 'Invalid email or password');
     } finally {
       setLoading(false);
     }
   };
 
-  // Admin login submission
-  const handleAdminLogin = async (e) => {
+  // 3. Sign Up Handler
+  const handleSignUpSubmit = async (e) => {
     e.preventDefault();
-    setAdminError('');
+    setGeneralError('');
+    const newErrors = {};
+
+    if (!signUpName || signUpName.trim().length < 2) {
+      newErrors.name = 'Full name must be at least 2 characters';
+    }
+    if (!isValidEmail(signUpEmail)) {
+      newErrors.email = 'Please enter a valid email address';
+    }
+    if (!isValidMobile(signUpMobile)) {
+      newErrors.mobile = 'Enter a valid 10-digit Indian mobile number (e.g., 9944076675)';
+    }
+    if (!signUpPassword || signUpPassword.length < 6) {
+      newErrors.password = 'Password must be at least 6 characters';
+    }
+    if (signUpPassword !== signUpConfirmPassword) {
+      newErrors.confirmPassword = 'Passwords do not match';
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+    setErrors({});
+
     try {
       setLoading(true);
-      const res = await api.adminLogin(adminEmail, adminPassword);
-      localStorage.setItem('angalamman_token', res.token);
-      localStorage.setItem('angalamman_admin', JSON.stringify(res.admin));
-      onLoginSuccess(res.admin, true);
+      const res = await api.register({
+        name: signUpName.trim(),
+        email: signUpEmail.trim(),
+        mobile: signUpMobile.trim(),
+        password: signUpPassword
+      });
+      handlePostLogin(res);
+    } catch (err) {
+      setGeneralError(err.message || 'Failed to create account. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 4. Save Mobile for Google User
+  const handleSaveMobile = async (e) => {
+    e.preventDefault();
+    if (!isValidMobile(profileMobile)) {
+      setErrors({ profileMobile: 'Please enter a valid 10-digit Indian mobile number' });
+      return;
+    }
+    setErrors({});
+
+    try {
+      setLoading(true);
+      const res = await api.updateProfile({ mobile: profileMobile });
+      localStorage.setItem('angalamman_user', JSON.stringify(res.user));
+      onLoginSuccess(res.user, false);
       onClose();
     } catch (err) {
-      setAdminError(err.message || 'Invalid admin credentials');
+      setGeneralError(err.message || 'Failed to update phone number');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '460px' }}>
-        
+    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 9999 }}>
+      <div 
+        className="modal-content" 
+        onClick={(e) => e.stopPropagation()} 
+        style={{ maxWidth: '460px', maxHeight: '90vh', overflowY: 'auto', padding: '2rem' }}
+      >
         {/* Close Button */}
         <button
           onClick={onClose}
           style={{ position: 'absolute', top: '1.25rem', right: '1.25rem', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+          aria-label="Close"
         >
           <X size={20} />
         </button>
 
-        {/* STEP 1: Customer Google Login */}
-        {mode === 'customer' && (
+        {/* STEP 1: Main Auth (Sign In / Sign Up / Google) */}
+        {mode === 'auth' && (
           <div>
             {bannerMessage && (
               <div style={{
@@ -140,15 +206,15 @@ export default function AuthModal({
                 border: '1px solid rgba(59, 130, 246, 0.35)',
                 borderRadius: '12px',
                 padding: '0.85rem 1rem',
-                marginBottom: '1.5rem',
+                marginBottom: '1.25rem',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.75rem',
                 color: '#93c5fd',
-                fontSize: '0.86rem',
+                fontSize: '0.85rem',
                 lineHeight: '1.4'
               }}>
-                <Sparkles size={20} color="#60a5fa" style={{ flexShrink: 0 }} />
+                <Sparkles size={18} color="#60a5fa" style={{ flexShrink: 0 }} />
                 <div>
                   <strong style={{ color: '#fff' }}>Login Required: </strong>
                   {bannerMessage}
@@ -156,235 +222,356 @@ export default function AuthModal({
               </div>
             )}
 
-            <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
+            <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
               <div style={{
-                width: '52px',
-                height: '52px',
+                width: '48px',
+                height: '48px',
                 borderRadius: '14px',
                 background: 'rgba(37, 99, 235, 0.2)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                margin: '0 auto 1rem auto',
+                margin: '0 auto 0.85rem auto',
                 color: '#38bdf8'
               }}>
-                <User size={26} />
+                <User size={24} />
               </div>
-              <h3 style={{ fontSize: '1.5rem', color: '#fff', fontWeight: 700 }}>Customer Sign In</h3>
-              <p style={{ fontSize: '0.88rem', color: '#94a3b8', marginTop: '0.35rem' }}>
-                Sign in with your Google account to book deliveries, track tippers, and view official weighbridge bills.
+              <h3 style={{ fontSize: '1.45rem', color: '#fff', fontWeight: 700 }}>
+                {tab === 'signin' ? 'Welcome Back' : 'Create Customer Account'}
+              </h3>
+              <p style={{ fontSize: '0.86rem', color: '#94a3b8', marginTop: '0.25rem' }}>
+                {tab === 'signin' 
+                  ? 'Sign in to access your quotations, site deliveries, and invoices.' 
+                  : 'Register to book trucks, request quotations, and track orders.'}
               </p>
             </div>
 
-            {/* Official Google Sign-In Button */}
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem', width: '100%' }}>
-              <GoogleLogin
-                onSuccess={(credentialResponse) => handleGoogleAuthToken(credentialResponse.credential)}
-                onError={() => alert('Google Sign In failed. Please try again.')}
-                theme="outline"
-                size="large"
-                shape="pill"
-                text="continue_with"
-                width="340"
-              />
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', margin: '1rem 0' }}>
-              <div style={{ flex: 1, height: '1px', background: 'rgba(255, 255, 255, 0.1)' }} />
-              <span style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>or sign in with email</span>
-              <div style={{ flex: 1, height: '1px', background: 'rgba(255, 255, 255, 0.1)' }} />
-            </div>
-
-            {/* Google OAuth One-Click Button */}
-            <button
-              onClick={() => {
-                if (inputEmail) {
-                  handleGoogleSignInWithProfile(inputEmail, inputName);
-                } else {
-                  setMode('google-prompt');
-                }
-              }}
-              disabled={loading}
-              className="btn btn-outline"
-              style={{
-                width: '100%',
-                padding: '0.9rem',
-                fontSize: '1rem',
-                background: '#ffffff',
-                color: '#1f2937',
-                border: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '0.75rem',
-                borderRadius: '12px',
-                boxShadow: '0 4px 14px rgba(0, 0, 0, 0.2)',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'transform 0.15s, box-shadow 0.15s'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-1px)'}
-              onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-            >
-              <svg width="22" height="22" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-              </svg>
-              <span>Continue with Google</span>
-            </button>
-
-            {/* Quick 1-click test login options */}
-            <div style={{ marginTop: '1.25rem', padding: '0.85rem', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-              <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginBottom: '0.5rem', textAlign: 'center' }}>
-                Instant Quick-Login (Puducherry Contractors / Builders):
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                <button
-                  type="button"
-                  onClick={() => handleGoogleSignInWithProfile('v.ramanathan.pondy@gmail.com', 'V. Ramanathan (Civil Contractor)')}
-                  disabled={loading}
-                  style={{
-                    padding: '0.5rem 0.6rem',
-                    background: 'rgba(37, 99, 235, 0.1)',
-                    border: '1px solid rgba(37, 99, 235, 0.25)',
-                    borderRadius: '8px',
-                    color: '#93c5fd',
-                    fontSize: '0.76rem',
-                    cursor: 'pointer',
-                    textAlign: 'left'
-                  }}
-                >
-                  <strong style={{ display: 'block', color: '#fff' }}>V. Ramanathan</strong>
-                  Contractor Login
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleGoogleSignInWithProfile('s.jayakumar.build@gmail.com', 'S. Jayakumar (Home Builder)')}
-                  disabled={loading}
-                  style={{
-                    padding: '0.5rem 0.6rem',
-                    background: 'rgba(16, 185, 129, 0.1)',
-                    border: '1px solid rgba(16, 185, 129, 0.25)',
-                    borderRadius: '8px',
-                    color: '#6ee7b7',
-                    fontSize: '0.76rem',
-                    cursor: 'pointer',
-                    textAlign: 'left'
-                  }}
-                >
-                  <strong style={{ display: 'block', color: '#fff' }}>S. Jayakumar</strong>
-                  Home Builder Login
-                </button>
-              </div>
-            </div>
-
-            <div style={{ marginTop: '2rem', paddingTop: '1.25rem', borderTop: '1px solid rgba(255, 255, 255, 0.08)', textAlign: 'center' }}>
-              <button
-                onClick={() => setMode('admin')}
-                style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.82rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
-              >
-                <ShieldCheck size={14} color="#fb923c" />
-                <span>Administrative Staff Login</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 1.5: Custom Google Account Sign In Prompt */}
-        {mode === 'google-prompt' && (
-          <div>
-            <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+            {/* Error Banner */}
+            {generalError && (
               <div style={{
-                width: '48px',
-                height: '48px',
-                borderRadius: '50%',
-                background: '#ffffff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                margin: '0 auto 1rem auto'
+                background: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid rgba(239, 68, 68, 0.35)',
+                borderRadius: '10px',
+                padding: '0.75rem',
+                marginBottom: '1.25rem',
+                color: '#f87171',
+                fontSize: '0.85rem',
+                textAlign: 'center'
               }}>
-                <svg width="24" height="24" viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-                </svg>
+                {generalError}
               </div>
-              <h3 style={{ fontSize: '1.35rem', color: '#fff', fontWeight: 700 }}>Google Sign-In</h3>
-              <p style={{ fontSize: '0.85rem', color: '#94a3b8', marginTop: '0.25rem' }}>
-                Enter your Google Account details to proceed with your booking.
-              </p>
-            </div>
+            )}
 
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              if (!inputEmail || !inputEmail.includes('@')) {
-                setEmailError('Please enter a valid Google email address');
-                return;
-              }
-              setEmailError('');
-              handleGoogleSignInWithProfile(inputEmail, inputName);
-            }}>
-              <div className="form-group">
-                <label className="form-label">Full Name *</label>
-                <input
-                  type="text"
-                  required
-                  className="form-control"
-                  placeholder="e.g. R. Tharanishvaran"
-                  value={inputName}
-                  onChange={(e) => setInputName(e.target.value)}
+            {/* OPTION 1: Continue with Google (Original Google OAuth) */}
+            <div style={{ marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+                <GoogleLogin
+                  onSuccess={(credentialResponse) => handleGoogleAuthToken(credentialResponse.credential)}
+                  onError={() => setGeneralError('Google Sign-In was cancelled or failed.')}
+                  theme="outline"
+                  size="large"
+                  shape="pill"
+                  text="continue_with"
+                  width="360"
+                  logo_alignment="left"
                 />
               </div>
+            </div>
 
-              <div className="form-group">
-                <label className="form-label">Google Email Address *</label>
-                <div style={{ position: 'relative' }}>
-                  <Mail size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
-                  <input
-                    type="email"
-                    required
-                    className="form-control"
-                    style={{ paddingLeft: '38px' }}
-                    placeholder="e.g. tharanish.varan@gmail.com"
-                    value={inputEmail}
-                    onChange={(e) => {
-                      setInputEmail(e.target.value);
-                      setEmailError('');
-                    }}
-                  />
-                </div>
-                {emailError && (
-                  <p style={{ color: '#f87171', fontSize: '0.8rem', marginTop: '0.35rem' }}>{emailError}</p>
-                )}
-              </div>
+            {/* Divider */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', margin: '1.25rem 0' }}>
+              <div style={{ flex: 1, height: '1px', background: 'rgba(255, 255, 255, 0.1)' }} />
+              <span style={{ fontSize: '0.74rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
+                Or with email
+              </span>
+              <div style={{ flex: 1, height: '1px', background: 'rgba(255, 255, 255, 0.1)' }} />
+            </div>
 
+            {/* Tab Switcher: Sign In vs Create Account */}
+            <div style={{
+              display: 'flex',
+              background: 'rgba(255, 255, 255, 0.05)',
+              borderRadius: '10px',
+              padding: '0.3rem',
+              marginBottom: '1.25rem',
+              gap: '0.3rem'
+            }}>
               <button
-                type="submit"
-                disabled={loading}
-                className="btn btn-primary"
-                style={{ width: '100%', marginTop: '0.5rem', padding: '0.85rem' }}
+                type="button"
+                onClick={() => { setTab('signin'); setErrors({}); setGeneralError(''); }}
+                style={{
+                  flex: 1,
+                  padding: '0.6rem',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: tab === 'signin' ? '#2563eb' : 'transparent',
+                  color: tab === 'signin' ? '#ffffff' : '#94a3b8',
+                  fontWeight: 600,
+                  fontSize: '0.88rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.4rem',
+                  transition: 'all 0.2s'
+                }}
               >
-                {loading ? 'Authenticating with Google...' : 'Continue to Booking →'}
+                <LogIn size={15} />
+                <span>Sign In</span>
               </button>
+              <button
+                type="button"
+                onClick={() => { setTab('signup'); setErrors({}); setGeneralError(''); }}
+                style={{
+                  flex: 1,
+                  padding: '0.6rem',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: tab === 'signup' ? '#2563eb' : 'transparent',
+                  color: tab === 'signup' ? '#ffffff' : '#94a3b8',
+                  fontWeight: 600,
+                  fontSize: '0.88rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.4rem',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <UserPlus size={15} />
+                <span>Create Account</span>
+              </button>
+            </div>
 
-              <div style={{ marginTop: '1rem', textAlign: 'center' }}>
+            {/* TAB A: SIGN IN FORM */}
+            {tab === 'signin' && (
+              <form onSubmit={handleSignInSubmit}>
+                <div className="form-group" style={{ marginBottom: '1rem' }}>
+                  <label className="form-label">Email Address *</label>
+                  <div style={{ position: 'relative' }}>
+                    <Mail size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                    <input
+                      type="email"
+                      required
+                      placeholder="name@example.com"
+                      className="form-control"
+                      style={{ paddingLeft: '38px' }}
+                      value={signInEmail}
+                      onChange={(e) => {
+                        setSignInEmail(e.target.value);
+                        setErrors(prev => ({ ...prev, email: '' }));
+                      }}
+                    />
+                  </div>
+                  {errors.email && <p style={{ color: '#f87171', fontSize: '0.8rem', marginTop: '0.3rem' }}>{errors.email}</p>}
+                </div>
+
+                <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                  <label className="form-label">Password *</label>
+                  <div style={{ position: 'relative' }}>
+                    <Lock size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                    <input
+                      type={showSignInPassword ? 'text' : 'password'}
+                      required
+                      placeholder="Enter password"
+                      className="form-control"
+                      style={{ paddingLeft: '38px', paddingRight: '40px' }}
+                      value={signInPassword}
+                      onChange={(e) => {
+                        setSignInPassword(e.target.value);
+                        setErrors(prev => ({ ...prev, password: '' }));
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowSignInPassword(!showSignInPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '12px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        color: '#94a3b8',
+                        cursor: 'pointer',
+                        padding: 0
+                      }}
+                      aria-label={showSignInPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showSignInPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                  {errors.password && <p style={{ color: '#f87171', fontSize: '0.8rem', marginTop: '0.3rem' }}>{errors.password}</p>}
+                </div>
+
                 <button
-                  type="button"
-                  onClick={() => setMode('customer')}
-                  style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.82rem', cursor: 'pointer' }}
+                  type="submit"
+                  disabled={loading}
+                  className="btn btn-primary"
+                  style={{ width: '100%', padding: '0.85rem', fontWeight: 700 }}
                 >
-                  ← Back
+                  {loading ? 'Signing in...' : 'Sign In'}
                 </button>
-              </div>
-            </form>
+              </form>
+            )}
+
+            {/* TAB B: CREATE ACCOUNT (SIGN UP) FORM */}
+            {tab === 'signup' && (
+              <form onSubmit={handleSignUpSubmit}>
+                <div className="form-group" style={{ marginBottom: '0.9rem' }}>
+                  <label className="form-label">Full Name *</label>
+                  <div style={{ position: 'relative' }}>
+                    <User size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                    <input
+                      type="text"
+                      required
+                      placeholder="Enter full name"
+                      className="form-control"
+                      style={{ paddingLeft: '38px' }}
+                      value={signUpName}
+                      onChange={(e) => {
+                        setSignUpName(e.target.value);
+                        setErrors(prev => ({ ...prev, name: '' }));
+                      }}
+                    />
+                  </div>
+                  {errors.name && <p style={{ color: '#f87171', fontSize: '0.8rem', marginTop: '0.3rem' }}>{errors.name}</p>}
+                </div>
+
+                <div className="form-group" style={{ marginBottom: '0.9rem' }}>
+                  <label className="form-label">Email Address *</label>
+                  <div style={{ position: 'relative' }}>
+                    <Mail size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                    <input
+                      type="email"
+                      required
+                      placeholder="name@example.com"
+                      className="form-control"
+                      style={{ paddingLeft: '38px' }}
+                      value={signUpEmail}
+                      onChange={(e) => {
+                        setSignUpEmail(e.target.value);
+                        setErrors(prev => ({ ...prev, email: '' }));
+                      }}
+                    />
+                  </div>
+                  {errors.email && <p style={{ color: '#f87171', fontSize: '0.8rem', marginTop: '0.3rem' }}>{errors.email}</p>}
+                </div>
+
+                <div className="form-group" style={{ marginBottom: '0.9rem' }}>
+                  <label className="form-label">Phone Number *</label>
+                  <div style={{ position: 'relative' }}>
+                    <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: '0.88rem', fontWeight: 600 }}>
+                      +91
+                    </span>
+                    <input
+                      type="tel"
+                      required
+                      maxLength="10"
+                      placeholder="Enter 10-digit number"
+                      className="form-control"
+                      style={{ paddingLeft: '45px' }}
+                      value={signUpMobile}
+                      onChange={(e) => {
+                        setSignUpMobile(e.target.value.replace(/\D/g, ''));
+                        setErrors(prev => ({ ...prev, mobile: '' }));
+                      }}
+                    />
+                  </div>
+                  {errors.mobile && <p style={{ color: '#f87171', fontSize: '0.8rem', marginTop: '0.3rem' }}>{errors.mobile}</p>}
+                </div>
+
+                <div className="form-group" style={{ marginBottom: '0.9rem' }}>
+                  <label className="form-label">Password *</label>
+                  <div style={{ position: 'relative' }}>
+                    <Lock size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                    <input
+                      type={showSignUpPassword ? 'text' : 'password'}
+                      required
+                      placeholder="Minimum 6 characters"
+                      className="form-control"
+                      style={{ paddingLeft: '38px', paddingRight: '40px' }}
+                      value={signUpPassword}
+                      onChange={(e) => {
+                        setSignUpPassword(e.target.value);
+                        setErrors(prev => ({ ...prev, password: '' }));
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowSignUpPassword(!showSignUpPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '12px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        color: '#94a3b8',
+                        cursor: 'pointer',
+                        padding: 0
+                      }}
+                      aria-label={showSignUpPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showSignUpPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                  {errors.password && <p style={{ color: '#f87171', fontSize: '0.8rem', marginTop: '0.3rem' }}>{errors.password}</p>}
+                </div>
+
+                <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                  <label className="form-label">Confirm Password *</label>
+                  <div style={{ position: 'relative' }}>
+                    <Lock size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                    <input
+                      type={showSignUpConfirm ? 'text' : 'password'}
+                      required
+                      placeholder="Re-enter password"
+                      className="form-control"
+                      style={{ paddingLeft: '38px', paddingRight: '40px' }}
+                      value={signUpConfirmPassword}
+                      onChange={(e) => {
+                        setSignUpConfirmPassword(e.target.value);
+                        setErrors(prev => ({ ...prev, confirmPassword: '' }));
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowSignUpConfirm(!showSignUpConfirm)}
+                      style={{
+                        position: 'absolute',
+                        right: '12px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        color: '#94a3b8',
+                        cursor: 'pointer',
+                        padding: 0
+                      }}
+                      aria-label={showSignUpConfirm ? 'Hide password' : 'Show password'}
+                    >
+                      {showSignUpConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                  {errors.confirmPassword && <p style={{ color: '#f87171', fontSize: '0.8rem', marginTop: '0.3rem' }}>{errors.confirmPassword}</p>}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="btn btn-primary"
+                  style={{ width: '100%', padding: '0.85rem', fontWeight: 700 }}
+                >
+                  {loading ? 'Creating Account...' : 'Create Account'}
+                </button>
+              </form>
+            )}
           </div>
         )}
 
-        {/* STEP 2: Complete Profile (Mobile Number Collection - Requirement 15 & 39) */}
+        {/* STEP 2: Complete Profile (Mobile Number for Google login only) */}
         {mode === 'complete-profile' && (
           <div>
             <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
@@ -401,17 +588,14 @@ export default function AuthModal({
               }}>
                 <Phone size={24} />
               </div>
-              <h3 style={{ fontSize: '1.4rem', color: '#fff' }}>Complete Your Profile</h3>
+              <h3 style={{ fontSize: '1.4rem', color: '#fff' }}>Add Your Mobile Number</h3>
               <p style={{ fontSize: '0.88rem', color: '#cbd5e1', marginTop: '0.5rem' }}>
-                Please enter your mobile number to complete your customer account.
+                Required for vehicle dispatch coordination and weighbridge SMS receipts.
               </p>
-              <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '0.2rem' }}>
-                Required for site dispatch coordination and weighbridge SMS receipts.
-              </div>
             </div>
 
             <form onSubmit={handleSaveMobile}>
-              <div className="form-group">
+              <div className="form-group" style={{ marginBottom: '1.25rem' }}>
                 <label className="form-label">10-Digit Indian Mobile Number *</label>
                 <div style={{ position: 'relative' }}>
                   <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: '0.9rem', fontWeight: 600 }}>
@@ -421,19 +605,19 @@ export default function AuthModal({
                     type="tel"
                     required
                     maxLength="10"
-                    placeholder="9944076675"
+                    placeholder="Enter 10-digit number"
                     className="form-control"
                     style={{ paddingLeft: '45px', fontSize: '1.1rem', letterSpacing: '0.05em' }}
-                    value={mobile}
+                    value={profileMobile}
                     onChange={(e) => {
-                      setMobile(e.target.value.replace(/\D/g, ''));
-                      setMobileError('');
+                      setProfileMobile(e.target.value.replace(/\D/g, ''));
+                      setErrors({});
                     }}
                   />
                 </div>
-                {mobileError && (
+                {errors.profileMobile && (
                   <p style={{ color: '#f87171', fontSize: '0.8rem', marginTop: '0.4rem' }}>
-                    {mobileError}
+                    {errors.profileMobile}
                   </p>
                 )}
               </div>
@@ -442,95 +626,10 @@ export default function AuthModal({
                 type="submit"
                 disabled={loading}
                 className="btn btn-orange"
-                style={{ width: '100%', marginTop: '0.5rem' }}
+                style={{ width: '100%', marginTop: '0.5rem', padding: '0.85rem', fontWeight: 700 }}
               >
-                {loading ? 'Saving...' : 'Verify & Continue'}
+                {loading ? 'Saving...' : 'Confirm & Continue'}
               </button>
-            </form>
-          </div>
-        )}
-
-        {/* STEP 3: Admin Login */}
-        {mode === 'admin' && (
-          <div>
-            <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-              <div style={{
-                width: '50px',
-                height: '50px',
-                borderRadius: '14px',
-                background: 'rgba(37, 99, 235, 0.2)',
-                color: '#38bdf8',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                margin: '0 auto 1rem auto'
-              }}>
-                <ShieldCheck size={26} />
-              </div>
-              <h3 style={{ fontSize: '1.4rem', color: '#fff' }}>Administrator Login</h3>
-              <p style={{ fontSize: '0.85rem', color: '#94a3b8', marginTop: '0.25rem' }}>
-                Authorized Sri Angalamman dispatch & billing portal.
-              </p>
-            </div>
-
-            {adminError && (
-              <div style={{ padding: '0.75rem', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '8px', color: '#f87171', fontSize: '0.85rem', marginBottom: '1rem' }}>
-                {adminError}
-              </div>
-            )}
-
-            <form onSubmit={handleAdminLogin}>
-              <div className="form-group">
-                <label className="form-label">Admin Email</label>
-                <div style={{ position: 'relative' }}>
-                  <Mail size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
-                  <input
-                    type="email"
-                    required
-                    className="form-control"
-                    style={{ paddingLeft: '38px' }}
-                    value={adminEmail}
-                    onChange={(e) => setAdminEmail(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Password</label>
-                <div style={{ position: 'relative' }}>
-                  <Lock size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
-                  <input
-                    type="password"
-                    required
-                    className="form-control"
-                    style={{ paddingLeft: '38px' }}
-                    value={adminPassword}
-                    onChange={(e) => setAdminPassword(e.target.value)}
-                  />
-                </div>
-                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.4rem' }}>
-                  Default Super Admin: admin@angalamman.com / Admin@1234
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="btn btn-primary"
-                style={{ width: '100%', marginTop: '0.5rem' }}
-              >
-                {loading ? 'Authenticating...' : 'Sign In as Administrator'}
-              </button>
-
-              <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
-                <button
-                  type="button"
-                  onClick={() => setMode('customer')}
-                  style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.82rem', cursor: 'pointer' }}
-                >
-                  ← Return to Customer Login
-                </button>
-              </div>
             </form>
           </div>
         )}

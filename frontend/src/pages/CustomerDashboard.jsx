@@ -4,13 +4,17 @@ import {
   FileText, 
   Truck, 
   Receipt, 
-  Clock, 
-  CheckCircle, 
-  XCircle, 
   ArrowLeft, 
   Phone, 
   MapPin, 
-  Plus 
+  Plus,
+  LogOut,
+  Calendar,
+  CheckCircle2,
+  Clock,
+  Sparkles,
+  ShieldCheck,
+  Download
 } from 'lucide-react';
 import { api } from '../api';
 
@@ -20,7 +24,8 @@ export default function CustomerDashboard({
   onOpenQuote, 
   onOpenDelivery, 
   onViewInvoice, 
-  onProfileUpdated 
+  onProfileUpdated,
+  onLogout
 }) {
   const [activeTab, setActiveTab] = useState('deliveries'); // 'deliveries', 'quotes', 'invoices', 'profile'
   const [quotes, setQuotes] = useState([]);
@@ -29,11 +34,12 @@ export default function CustomerDashboard({
   const [loading, setLoading] = useState(true);
 
   // Profile Edit State
-  const [profileName, setProfileName] = useState(user.name || '');
-  const [profileMobile, setProfileMobile] = useState(user.mobile || '');
-  const [profileAddress, setProfileAddress] = useState(user.address || '');
+  const [profileName, setProfileName] = useState(user?.name || '');
+  const [profileMobile, setProfileMobile] = useState(user?.mobile || '');
+  const [profileAddress, setProfileAddress] = useState(user?.address || '');
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileMsg, setProfileMsg] = useState('');
+  const [profileError, setProfileError] = useState('');
 
   useEffect(() => {
     loadData();
@@ -47,9 +53,9 @@ export default function CustomerDashboard({
         api.getMyDeliveries().catch(() => []),
         api.getMyInvoices().catch(() => [])
       ]);
-      setQuotes(q);
-      setDeliveries(d);
-      setInvoices(inv);
+      setQuotes(Array.isArray(q) ? q : []);
+      setDeliveries(Array.isArray(d) ? d : []);
+      setInvoices(Array.isArray(inv) ? inv : []);
     } catch (err) {
       console.error('Error fetching dashboard records:', err);
     } finally {
@@ -59,18 +65,32 @@ export default function CustomerDashboard({
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
+    setProfileError('');
+    setProfileMsg('');
+
+    if (!profileName || profileName.trim().length < 2) {
+      setProfileError('Full name must be at least 2 characters.');
+      return;
+    }
+
+    const cleanedMobile = (profileMobile || '').replace(/\D/g, '');
+    if (cleanedMobile && !/^[6-9]\d{9}$/.test(cleanedMobile)) {
+      setProfileError('Please enter a valid 10-digit Indian mobile number.');
+      return;
+    }
+
     try {
       setSavingProfile(true);
       const res = await api.updateProfile({
-        name: profileName,
-        mobile: profileMobile,
-        address: profileAddress
+        name: profileName.trim(),
+        mobile: cleanedMobile,
+        address: profileAddress.trim()
       });
-      setProfileMsg('Profile saved successfully!');
+      setProfileMsg('Profile updated successfully!');
       if (onProfileUpdated) onProfileUpdated(res.user);
-      setTimeout(() => setProfileMsg(''), 3000);
+      setTimeout(() => setProfileMsg(''), 4000);
     } catch (err) {
-      alert(err.message || 'Failed to update profile');
+      setProfileError(err.message || 'Failed to update profile');
     } finally {
       setSavingProfile(false);
     }
@@ -81,14 +101,14 @@ export default function CustomerDashboard({
       case 'Delivered':
       case 'Paid':
       case 'Converted':
-        return <span className="badge badge-green">{status}</span>;
+        return <span className="badge badge-green" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><CheckCircle2 size={12} /> {status}</span>;
       case 'Out for Delivery':
       case 'Confirmed':
       case 'Processing':
-        return <span className="badge badge-blue">{status}</span>;
+        return <span className="badge badge-blue" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><Truck size={12} /> {status}</span>;
       case 'Pending':
       case 'Unpaid':
-        return <span className="badge badge-orange">{status}</span>;
+        return <span className="badge badge-orange" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><Clock size={12} /> {status}</span>;
       case 'Cancelled':
         return <span className="badge badge-red">{status}</span>;
       default:
@@ -96,56 +116,162 @@ export default function CustomerDashboard({
     }
   };
 
+  const renderAvatar = (size = 46) => {
+    if (user?.profile_image) {
+      return (
+        <img
+          src={user.profile_image}
+          alt={user.name || 'User'}
+          style={{
+            width: `${size}px`,
+            height: `${size}px`,
+            borderRadius: '50%',
+            objectFit: 'cover',
+            border: '2px solid rgba(56, 189, 248, 0.4)',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)'
+          }}
+        />
+      );
+    }
+    const initial = (user?.name || user?.email || 'U').charAt(0).toUpperCase();
+    return (
+      <div
+        style={{
+          width: `${size}px`,
+          height: `${size}px`,
+          borderRadius: '50%',
+          background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 50%, #0284c7 100%)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#ffffff',
+          fontSize: `${Math.round(size * 0.42)}px`,
+          fontWeight: 800,
+          border: '2px solid rgba(255, 255, 255, 0.25)',
+          boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)'
+        }}
+      >
+        {initial}
+      </div>
+    );
+  };
+
   return (
     <div style={{
       minHeight: '100vh',
       background: 'radial-gradient(circle at 15% 15%, #0f1d38 0%, #070e1b 60%, #050a14 100%)',
-      paddingTop: '6rem',
-      paddingBottom: '5rem'
+      paddingTop: '3rem',
+      paddingBottom: '5rem',
+      position: 'relative',
+      zIndex: 1
     }}>
-      <div className="container">
+      <div className="container" style={{ maxWidth: '1200px' }}>
         
-        {/* Top Header Bar */}
+        {/* Top Header Card */}
         <div style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '1rem',
-          marginBottom: '2.5rem'
+          background: 'rgba(13, 22, 42, 0.85)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          borderRadius: '20px',
+          padding: '1.75rem 2rem',
+          backdropFilter: 'blur(16px)',
+          boxShadow: '0 12px 36px rgba(0, 0, 0, 0.4)',
+          marginBottom: '2rem'
         }}>
-          <div>
-            <button
-              onClick={onClose}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#38bdf8',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                fontSize: '0.9rem',
-                cursor: 'pointer',
-                marginBottom: '0.5rem'
-              }}
-            >
-              <ArrowLeft size={16} /> Back to Website
-            </button>
-            <h1 style={{ fontSize: '2.2rem', color: '#fff', fontWeight: 800 }}>
-              Welcome, <span className="gradient-text">{user.name || 'Valued Customer'}</span>
-            </h1>
-            <p style={{ color: '#94a3b8', fontSize: '0.95rem' }}>
-              Manage your construction material dispatches, track orders, and view tax invoices.
-            </p>
+          <div style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '1.25rem'
+          }}>
+            {/* Customer Info */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+              {renderAvatar(56)}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                  <h1 style={{ fontSize: '1.75rem', color: '#fff', fontWeight: 800, margin: 0 }}>
+                    {user?.name || 'Valued Customer'}
+                  </h1>
+                  <span style={{
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    padding: '0.2rem 0.6rem',
+                    borderRadius: '9999px',
+                    background: 'rgba(16, 185, 129, 0.18)',
+                    color: '#34d399',
+                    border: '1px solid rgba(16, 185, 129, 0.35)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.3rem'
+                  }}>
+                    <ShieldCheck size={12} /> Verified Customer
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.88rem', color: '#94a3b8', marginTop: '0.25rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                  <span>{user?.email}</span>
+                  {user?.mobile && <span>• +91 {user.mobile}</span>}
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Navigation Buttons */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <button 
+                onClick={onOpenQuote} 
+                className="btn btn-outline btn-sm"
+                style={{ background: 'rgba(255, 255, 255, 0.05)', borderColor: 'rgba(255, 255, 255, 0.15)' }}
+              >
+                <Plus size={15} /> New Quote
+              </button>
+              <button 
+                onClick={onOpenDelivery} 
+                className="btn btn-orange btn-sm"
+              >
+                <Truck size={15} /> Book Delivery
+              </button>
+              <button 
+                onClick={onClose} 
+                className="btn btn-outline btn-sm"
+                style={{ color: '#38bdf8', borderColor: 'rgba(56, 189, 248, 0.3)' }}
+              >
+                <ArrowLeft size={15} /> Back to Store
+              </button>
+              {onLogout && (
+                <button
+                  onClick={onLogout}
+                  className="btn btn-outline btn-sm"
+                  style={{ color: '#f87171', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+                  title="Sign Out"
+                >
+                  <LogOut size={15} /> Logout
+                </button>
+              )}
+            </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '0.75rem' }}>
-            <button onClick={onOpenQuote} className="btn btn-outline btn-sm">
-              <Plus size={14} /> New Quote
-            </button>
-            <button onClick={onOpenDelivery} className="btn btn-orange btn-sm">
-              <Truck size={14} /> Book Delivery
-            </button>
+          {/* Quick Metrics Counter */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gap: '1rem',
+            marginTop: '1.5rem',
+            paddingTop: '1.5rem',
+            borderTop: '1px solid rgba(255, 255, 255, 0.08)'
+          }}>
+            <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '0.9rem 1.1rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+              <div style={{ fontSize: '0.78rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Site Deliveries</div>
+              <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#38bdf8', marginTop: '0.2rem' }}>{deliveries.length}</div>
+            </div>
+            <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '0.9rem 1.1rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+              <div style={{ fontSize: '0.78rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Quotations Requested</div>
+              <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#fb923c', marginTop: '0.2rem' }}>{quotes.length}</div>
+            </div>
+            <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '0.9rem 1.1rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+              <div style={{ fontSize: '0.78rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Invoices & Bills</div>
+              <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#34d399', marginTop: '0.2rem' }}>{invoices.length}</div>
+            </div>
           </div>
         </div>
 
@@ -159,10 +285,10 @@ export default function CustomerDashboard({
           overflowX: 'auto'
         }}>
           {[
-            { id: 'deliveries', label: `Site Deliveries (${deliveries.length})`, icon: <Truck size={16} /> },
-            { id: 'quotes', label: `Quotations (${quotes.length})`, icon: <FileText size={16} /> },
-            { id: 'invoices', label: `Bills & Invoices (${invoices.length})`, icon: <Receipt size={16} /> },
-            { id: 'profile', label: 'My Customer Profile', icon: <User size={16} /> }
+            { id: 'deliveries', label: `My Deliveries (${deliveries.length})`, icon: <Truck size={16} /> },
+            { id: 'quotes', label: `My Quotations (${quotes.length})`, icon: <FileText size={16} /> },
+            { id: 'invoices', label: `Invoices & Bills (${invoices.length})`, icon: <Receipt size={16} /> },
+            { id: 'profile', label: 'Customer Profile', icon: <User size={16} /> }
           ].map((tab) => (
             <button
               key={tab.id}
@@ -171,15 +297,16 @@ export default function CustomerDashboard({
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.5rem',
-                padding: '0.65rem 1.25rem',
-                borderRadius: '10px',
+                padding: '0.75rem 1.4rem',
+                borderRadius: '12px',
                 border: 'none',
-                background: activeTab === tab.id ? 'rgba(37, 99, 235, 0.25)' : 'transparent',
-                color: activeTab === tab.id ? '#60a5fa' : '#94a3b8',
+                background: activeTab === tab.id ? 'linear-gradient(135deg, #1d4ed8, #2563eb)' : 'rgba(255, 255, 255, 0.04)',
+                color: activeTab === tab.id ? '#ffffff' : '#94a3b8',
                 fontWeight: activeTab === tab.id ? 700 : 500,
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
-                transition: 'all 0.2s'
+                transition: 'all 0.2s',
+                boxShadow: activeTab === tab.id ? '0 4px 14px rgba(37, 99, 235, 0.4)' : 'none'
               }}
             >
               {tab.icon}
@@ -192,14 +319,22 @@ export default function CustomerDashboard({
         {activeTab === 'deliveries' && (
           <div>
             {deliveries.length === 0 ? (
-              <div className="glass-card" style={{ padding: '3rem', textAlign: 'center' }}>
-                <Truck size={42} color="#64748b" style={{ margin: '0 auto 1rem auto' }} />
-                <h3 style={{ color: '#fff', fontSize: '1.2rem', marginBottom: '0.5rem' }}>No Site Deliveries Yet</h3>
-                <p style={{ color: '#94a3b8', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-                  Ready to pour concrete or lay bricks? Book vehicle transport with our dispatch team.
+              <div style={{
+                background: 'rgba(13, 22, 42, 0.7)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '18px',
+                padding: '3.5rem 2rem',
+                textAlign: 'center'
+              }}>
+                <Truck size={48} color="#38bdf8" style={{ margin: '0 auto 1rem auto', opacity: 0.8 }} />
+                <h3 style={{ color: '#fff', fontSize: '1.3rem', marginBottom: '0.5rem', fontWeight: 700 }}>
+                  No Site Deliveries Booked Yet
+                </h3>
+                <p style={{ color: '#94a3b8', fontSize: '0.92rem', marginBottom: '1.75rem', maxWidth: '480px', margin: '0 auto 1.75rem auto' }}>
+                  Ready to order blue metals, sands, or gravel? Book direct site delivery with our Puducherry dispatch tippers.
                 </p>
-                <button onClick={onOpenDelivery} className="btn btn-primary btn-sm">
-                  Book First Delivery
+                <button onClick={onOpenDelivery} className="btn btn-primary">
+                  <Truck size={16} /> Book Your First Delivery
                 </button>
               </div>
             ) : (
@@ -207,40 +342,42 @@ export default function CustomerDashboard({
                 {deliveries.map((del) => (
                   <div 
                     key={del.id}
-                    className="glass-card"
                     style={{
-                      padding: '1.5rem',
+                      background: 'rgba(13, 22, 42, 0.85)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '16px',
+                      padding: '1.5rem 1.75rem',
                       display: 'flex',
                       flexWrap: 'wrap',
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       gap: '1.5rem',
-                      borderRadius: '14px'
+                      boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)'
                     }}
                   >
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.4rem' }}>
-                        <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#38bdf8' }}>
-                          {del.request_number}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#38bdf8', letterSpacing: '0.04em' }}>
+                          #{del.request_number}
                         </span>
                         {getStatusBadge(del.status)}
                       </div>
-                      <h3 style={{ fontSize: '1.15rem', color: '#fff', marginBottom: '0.25rem' }}>
+                      <h3 style={{ fontSize: '1.25rem', color: '#fff', fontWeight: 700, marginBottom: '0.35rem' }}>
                         {del.quantity} {del.unit} of {del.material_name}
                       </h3>
-                      <div style={{ fontSize: '0.85rem', color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <MapPin size={14} color="#fb923c" /> Site: {del.delivery_address}
+                      <div style={{ fontSize: '0.88rem', color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.2rem' }}>
+                        <MapPin size={15} color="#fb923c" /> Site Address: {del.delivery_address}
                       </div>
                       {del.preferred_date && (
-                        <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '0.2rem' }}>
-                          Preferred Slot: {del.preferred_date}
+                        <div style={{ fontSize: '0.82rem', color: '#94a3b8', marginTop: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <Calendar size={14} color="#60a5fa" /> Preferred Date: {del.preferred_date}
                         </div>
                       )}
                     </div>
 
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                        Booked: {new Date(del.created_at).toLocaleDateString()}
+                      <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                        Requested on: {new Date(del.created_at).toLocaleDateString()}
                       </div>
                     </div>
                   </div>
@@ -254,14 +391,22 @@ export default function CustomerDashboard({
         {activeTab === 'quotes' && (
           <div>
             {quotes.length === 0 ? (
-              <div className="glass-card" style={{ padding: '3rem', textAlign: 'center' }}>
-                <FileText size={42} color="#64748b" style={{ margin: '0 auto 1rem auto' }} />
-                <h3 style={{ color: '#fff', fontSize: '1.2rem', marginBottom: '0.5rem' }}>No Quotation Requests</h3>
-                <p style={{ color: '#94a3b8', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-                  Request formal price calculations for sands, aggregates, or bulk truckloads.
+              <div style={{
+                background: 'rgba(13, 22, 42, 0.7)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '18px',
+                padding: '3.5rem 2rem',
+                textAlign: 'center'
+              }}>
+                <FileText size={48} color="#fb923c" style={{ margin: '0 auto 1rem auto', opacity: 0.8 }} />
+                <h3 style={{ color: '#fff', fontSize: '1.3rem', marginBottom: '0.5rem', fontWeight: 700 }}>
+                  No Quotations Requested Yet
+                </h3>
+                <p style={{ color: '#94a3b8', fontSize: '0.92rem', marginBottom: '1.75rem', maxWidth: '480px', margin: '0 auto 1.75rem auto' }}>
+                  Need an official price calculation including lorry freight for your site in Puducherry? Submit a quotation request.
                 </p>
-                <button onClick={onOpenQuote} className="btn btn-orange btn-sm">
-                  Request Quotation
+                <button onClick={onOpenQuote} className="btn btn-orange">
+                  <FileText size={16} /> Request Official Quotation
                 </button>
               </div>
             ) : (
@@ -269,40 +414,42 @@ export default function CustomerDashboard({
                 {quotes.map((q) => (
                   <div 
                     key={q.id}
-                    className="glass-card"
                     style={{
-                      padding: '1.5rem',
+                      background: 'rgba(13, 22, 42, 0.85)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '16px',
+                      padding: '1.5rem 1.75rem',
                       display: 'flex',
                       flexWrap: 'wrap',
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       gap: '1.5rem',
-                      borderRadius: '14px'
+                      boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)'
                     }}
                   >
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.4rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
                         <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#fb923c' }}>
-                          {q.request_number}
+                          #{q.request_number}
                         </span>
                         {getStatusBadge(q.status)}
                       </div>
-                      <h3 style={{ fontSize: '1.15rem', color: '#fff', marginBottom: '0.25rem' }}>
+                      <h3 style={{ fontSize: '1.25rem', color: '#fff', fontWeight: 700, marginBottom: '0.35rem' }}>
                         {q.quantity} {q.unit} of {q.material_name}
                       </h3>
-                      <div style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>
+                      <div style={{ fontSize: '0.88rem', color: '#cbd5e1' }}>
                         Location: {q.delivery_location}
                       </div>
                       {q.admin_notes && (
-                        <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', background: 'rgba(37, 99, 235, 0.1)', border: '1px solid rgba(37, 99, 235, 0.25)', borderRadius: '6px', fontSize: '0.8rem', color: '#93c5fd' }}>
-                          <strong>Yard Note:</strong> {q.admin_notes}
+                        <div style={{ marginTop: '0.65rem', padding: '0.6rem 0.85rem', background: 'rgba(37, 99, 235, 0.12)', border: '1px solid rgba(37, 99, 235, 0.28)', borderRadius: '8px', fontSize: '0.84rem', color: '#93c5fd' }}>
+                          <strong>Yard Dispatch Note:</strong> {q.admin_notes}
                         </div>
                       )}
                     </div>
 
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                        Requested: {new Date(q.created_at).toLocaleDateString()}
+                      <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                        Submitted: {new Date(q.created_at).toLocaleDateString()}
                       </div>
                     </div>
                   </div>
@@ -316,11 +463,19 @@ export default function CustomerDashboard({
         {activeTab === 'invoices' && (
           <div>
             {invoices.length === 0 ? (
-              <div className="glass-card" style={{ padding: '3rem', textAlign: 'center' }}>
-                <Receipt size={42} color="#64748b" style={{ margin: '0 auto 1rem auto' }} />
-                <h3 style={{ color: '#fff', fontSize: '1.2rem', marginBottom: '0.5rem' }}>No Invoices Issued</h3>
-                <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
-                  Official tax invoices generated by our accounts office will appear here for viewing and downloading.
+              <div style={{
+                background: 'rgba(13, 22, 42, 0.7)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '18px',
+                padding: '3.5rem 2rem',
+                textAlign: 'center'
+              }}>
+                <Receipt size={48} color="#34d399" style={{ margin: '0 auto 1rem auto', opacity: 0.8 }} />
+                <h3 style={{ color: '#fff', fontSize: '1.3rem', marginBottom: '0.5rem', fontWeight: 700 }}>
+                  No Invoices Issued Yet
+                </h3>
+                <p style={{ color: '#94a3b8', fontSize: '0.92rem', maxWidth: '480px', margin: '0 auto' }}>
+                  Official weighbridge bills and GST tax invoices generated for your site will be displayed here for instant viewing and printing.
                 </p>
               </div>
             ) : (
@@ -328,43 +483,46 @@ export default function CustomerDashboard({
                 {invoices.map((inv) => (
                   <div 
                     key={inv.id}
-                    className="glass-card"
                     style={{
-                      padding: '1.5rem',
+                      background: 'rgba(13, 22, 42, 0.85)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '16px',
+                      padding: '1.5rem 1.75rem',
                       display: 'flex',
                       flexWrap: 'wrap',
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       gap: '1.5rem',
-                      borderRadius: '14px'
+                      boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)'
                     }}
                   >
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.4rem' }}>
-                        <span style={{ fontSize: '0.9rem', fontWeight: 800, color: '#38bdf8' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                        <span style={{ fontSize: '0.92rem', fontWeight: 800, color: '#38bdf8' }}>
                           {inv.invoice_number}
                         </span>
                         {getStatusBadge(inv.payment_status)}
                       </div>
-                      <div style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>
+                      <div style={{ fontSize: '0.88rem', color: '#cbd5e1' }}>
                         {inv.items ? inv.items.map(it => `${it.quantity} ${it.unit} ${it.material_name}`).join(', ') : 'Materials & Freight'}
                       </div>
-                      <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '0.2rem' }}>
+                      <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '0.3rem' }}>
                         Date: {new Date(inv.created_at).toLocaleDateString()}
                       </div>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
                       <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Grand Total</div>
-                        <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#fb923c' }}>
+                        <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase' }}>Grand Total</div>
+                        <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fb923c' }}>
                           ₹{inv.grand_total.toLocaleString('en-IN')}
                         </div>
                       </div>
 
                       <button
-                        onClick={() => onViewInvoice(inv)}
+                        onClick={() => onViewInvoice && onViewInvoice(inv)}
                         className="btn btn-outline btn-sm"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
                       >
                         <Receipt size={14} /> View / Print
                       </button>
@@ -378,58 +536,91 @@ export default function CustomerDashboard({
 
         {/* Tab 4: Customer Profile */}
         {activeTab === 'profile' && (
-          <div className="glass-card" style={{ maxWidth: '600px', margin: '0 auto', padding: '2rem', borderRadius: '18px' }}>
-            <h3 style={{ fontSize: '1.3rem', color: '#fff', marginBottom: '1.25rem' }}>
-              Customer Contact Details
-            </h3>
+          <div style={{
+            maxWidth: '620px',
+            margin: '0 auto',
+            background: 'rgba(13, 22, 42, 0.85)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '20px',
+            padding: '2rem 2.25rem',
+            boxShadow: '0 12px 36px rgba(0, 0, 0, 0.4)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+              {renderAvatar(50)}
+              <div>
+                <h3 style={{ fontSize: '1.35rem', color: '#fff', fontWeight: 700, margin: 0 }}>
+                  Customer Profile
+                </h3>
+                <div style={{ fontSize: '0.82rem', color: '#94a3b8', marginTop: '0.2rem' }}>
+                  Update your contact details for site dispatch coordination.
+                </div>
+              </div>
+            </div>
 
             {profileMsg && (
-              <div style={{ padding: '0.75rem', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '8px', color: '#34d399', fontSize: '0.85rem', marginBottom: '1rem' }}>
-                {profileMsg}
+              <div style={{ padding: '0.8rem', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.35)', borderRadius: '10px', color: '#34d399', fontSize: '0.88rem', marginBottom: '1.25rem' }}>
+                ✓ {profileMsg}
+              </div>
+            )}
+
+            {profileError && (
+              <div style={{ padding: '0.8rem', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.35)', borderRadius: '10px', color: '#f87171', fontSize: '0.88rem', marginBottom: '1.25rem' }}>
+                {profileError}
               </div>
             )}
 
             <form onSubmit={handleUpdateProfile}>
-              <div className="form-group">
-                <label className="form-label">Full Name</label>
+              <div className="form-group" style={{ marginBottom: '1.1rem' }}>
+                <label className="form-label">Full Name *</label>
                 <input
                   type="text"
                   required
+                  placeholder="Enter your name"
                   className="form-control"
                   value={profileName}
                   onChange={(e) => setProfileName(e.target.value)}
                 />
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Email Address (Google Account)</label>
+              <div className="form-group" style={{ marginBottom: '1.1rem' }}>
+                <label className="form-label">Email Address</label>
                 <input
                   type="email"
                   disabled
                   className="form-control"
-                  style={{ opacity: 0.7 }}
-                  value={user.email}
+                  style={{ opacity: 0.7, cursor: 'not-allowed' }}
+                  value={user?.email || ''}
                 />
+                <span style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.25rem', display: 'block' }}>
+                  Registered account email cannot be changed.
+                </span>
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Verified Mobile Number (10 digits)</label>
-                <input
-                  type="tel"
-                  required
-                  className="form-control"
-                  placeholder="9944076675"
-                  value={profileMobile}
-                  onChange={(e) => setProfileMobile(e.target.value)}
-                />
+              <div className="form-group" style={{ marginBottom: '1.1rem' }}>
+                <label className="form-label">Contact Mobile (10-Digit Indian Mobile) *</label>
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontWeight: 600 }}>
+                    +91
+                  </span>
+                  <input
+                    type="tel"
+                    required
+                    maxLength="10"
+                    placeholder="Enter 10-digit number"
+                    className="form-control"
+                    style={{ paddingLeft: '45px' }}
+                    value={profileMobile}
+                    onChange={(e) => setProfileMobile(e.target.value.replace(/\D/g, ''))}
+                  />
+                </div>
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Default Construction Site Address (Puducherry)</label>
+              <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                <label className="form-label">Default Construction Site Address</label>
                 <textarea
-                  rows="2"
+                  rows="3"
                   className="form-control"
-                  placeholder="Plot/Street, Colony, Area in Puducherry"
+                  placeholder="Street / Plot No., Colony, Area in Puducherry"
                   value={profileAddress}
                   onChange={(e) => setProfileAddress(e.target.value)}
                 />
@@ -439,9 +630,9 @@ export default function CustomerDashboard({
                 type="submit"
                 disabled={savingProfile}
                 className="btn btn-primary"
-                style={{ width: '100%', marginTop: '0.5rem' }}
+                style={{ width: '100%', padding: '0.85rem', fontWeight: 700 }}
               >
-                {savingProfile ? 'Saving...' : 'Update Profile'}
+                {savingProfile ? 'Saving Details...' : 'Save Changes'}
               </button>
             </form>
           </div>

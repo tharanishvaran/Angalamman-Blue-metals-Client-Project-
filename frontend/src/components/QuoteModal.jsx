@@ -106,11 +106,28 @@ export default function QuoteModal({ isOpen, onClose, initialMaterial = '', user
             alignItems: 'center',
             gap: '0.75rem'
           }}>
-            <img
-              src={user.profile_image || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'}
-              alt={user.name}
-              style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }}
-            />
+            {user.profile_image ? (
+              <img
+                src={user.profile_image}
+                alt={user.name}
+                style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }}
+              />
+            ) : (
+              <div style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #1d4ed8, #2563eb)',
+                color: '#fff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '0.85rem',
+                fontWeight: 700
+              }}>
+                {(user.name || user.email || 'U').charAt(0).toUpperCase()}
+              </div>
+            )}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                 <span>{user.name}</span>

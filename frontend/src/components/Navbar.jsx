@@ -181,12 +181,25 @@ export default function Navbar({
                   <img 
                     src={user.profile_image} 
                     alt={user.name} 
-                    style={{ width: '22px', height: '22px', borderRadius: '50%' }} 
+                    style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover' }} 
                   />
                 ) : (
-                  <User size={16} color="#38bdf8" />
+                  <div style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #1d4ed8, #2563eb)',
+                    color: '#fff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '0.75rem',
+                    fontWeight: 700
+                  }}>
+                    {(user.name || user.email || 'U').charAt(0).toUpperCase()}
+                  </div>
                 )}
-                <span style={{ maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span style={{ maxWidth: '110px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {user.name ? user.name.split(' ')[0] : 'Customer'}
                 </span>
                 <ChevronDown size={14} />
@@ -198,7 +211,7 @@ export default function Navbar({
                     position: 'absolute',
                     top: '120%',
                     right: 0,
-                    width: '200px',
+                    width: '210px',
                     background: '#0d172a',
                     border: '1px solid rgba(255, 255, 255, 0.12)',
                     borderRadius: '12px',
@@ -207,9 +220,18 @@ export default function Navbar({
                     zIndex: 1100
                   }}
                 >
-                  <div style={{ padding: '0.5rem', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                    <div style={{ fontWeight: 600, fontSize: '0.85rem', color: '#fff' }}>{user.name}</div>
-                    <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{user.mobile || user.email}</div>
+                  <div style={{ padding: '0.6rem', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    {user.profile_image ? (
+                      <img src={user.profile_image} alt={user.name} style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }} />
+                    ) : (
+                      <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#2563eb', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700 }}>
+                        {(user.name || user.email || 'U').charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <div style={{ overflow: 'hidden' }}>
+                      <div style={{ fontWeight: 600, fontSize: '0.85rem', color: '#fff', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>{user.name}</div>
+                      <div style={{ fontSize: '0.72rem', color: '#94a3b8', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>{user.email}</div>
+                    </div>
                   </div>
                   <button
                     onClick={() => {
@@ -273,8 +295,8 @@ export default function Navbar({
             </button>
           )}
 
-          {/* Admin Portal Button */}
-          {admin ? (
+          {/* Admin Portal Button (Only shown if currently authenticated as admin) */}
+          {admin && (
             <button
               onClick={onOpenAdminPortal}
               className="btn btn-primary btn-sm"
@@ -282,26 +304,6 @@ export default function Navbar({
               title="Admin Portal"
             >
               <ShieldCheck size={16} />
-              <span>Admin</span>
-            </button>
-          ) : (
-            <button
-              onClick={onOpenAdminAuth}
-              className="btn btn-outline btn-sm"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-                borderColor: 'rgba(249, 115, 22, 0.45)',
-                color: '#fb923c',
-                background: 'rgba(249, 115, 22, 0.08)',
-                padding: '0.4rem 0.75rem',
-                fontWeight: 600,
-                fontSize: '0.82rem'
-              }}
-              title="Admin Access Portal"
-            >
-              <ShieldCheck size={15} />
               <span>Admin</span>
             </button>
           )}
@@ -382,26 +384,61 @@ export default function Navbar({
           </div>
 
           <div style={{ paddingTop: '0.5rem', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
-            <button
-              onClick={() => {
-                setMobileMenuOpen(false);
-                if (admin) {
+            {user ? (
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    onOpenDashboard();
+                  }}
+                  className="btn btn-outline"
+                  style={{ flex: 1, justifyContent: 'center' }}
+                >
+                  <User size={15} /> Dashboard
+                </button>
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    onLogout();
+                  }}
+                  className="btn btn-outline"
+                  style={{ borderColor: 'rgba(239, 68, 68, 0.3)', color: '#f87171' }}
+                >
+                  <LogOut size={15} />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onOpenAuth();
+                }}
+                className="btn btn-primary"
+                style={{ width: '100%', justifyContent: 'center' }}
+              >
+                <User size={16} /> Sign In / Register
+              </button>
+            )}
+
+            {admin && (
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
                   onOpenAdminPortal();
-                } else {
-                  onOpenAdminAuth();
-                }
-              }}
-              className="btn btn-outline"
-              style={{
-                width: '100%',
-                justifyContent: 'center',
-                borderColor: 'rgba(249, 115, 22, 0.45)',
-                color: '#fb923c',
-                background: 'rgba(249, 115, 22, 0.08)'
-              }}
-            >
-              <ShieldCheck size={16} /> {admin ? 'Open Admin Control' : 'Admin Portal Login'}
-            </button>
+                }}
+                className="btn btn-outline"
+                style={{
+                  width: '100%',
+                  justifyContent: 'center',
+                  marginTop: '0.5rem',
+                  borderColor: 'rgba(37, 99, 235, 0.45)',
+                  color: '#60a5fa',
+                  background: 'rgba(37, 99, 235, 0.1)'
+                }}
+              >
+                <ShieldCheck size={16} /> Open Admin Control
+              </button>
+            )}
           </div>
         </div>
       )}

@@ -168,7 +168,169 @@ router.get('/me', authenticate, (req, res) => {
   res.json({ user: req.user });
 });
 
-// Admin Login
+// Customer Registration
+router.post('/register', (req, res) => {
+  try {
+    const { name, email, mobile, password } = req.body;
+
+    if (!name || name.trim().length < 2) {
+      return res.status(400).json({ error: 'Please enter a valid full name (at least 2 characters).' });
+    }
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Please enter a valid email address.' });
+    }
+
+    if (!mobile || !isValidIndianMobile(mobile)) {
+      return res.status(400).json({ error: 'Please enter a valid 10-digit Indian mobile number (e.g., 9944076675).' });
+    }
+
+    if (!password || password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters long.' });
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+    const cleanedMobile = cleanIndianMobile(mobile);
+
+    // Check if email already exists
+    const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(cleanEmail);
+    if (existingUser) {
+      return res.status(400).json({ error: 'An account with this email already exists. Please sign in.' });
+    }
+
+    const existingAdmin = db.prepare('SELECT id FROM admins WHERE email = ?').get(cleanEmail);
+    if (existingAdmin) {
+      return res.status(400).json({ error: 'This email is reserved for staff. Please sign in.' });
+    }
+
+    const passwordHash = bcrypt.hashSync(password, 10);
+    const ip = req.ip || req.headers['x-forwarded-for'] || '127.0.0.1';
+    const userAgent = req.headers['user-agent'] || 'Unknown';
+
+    const insert = db.prepare(`
+      INSERT INTO users (name, email, mobile, password_hash, role, status, login_count, first_login, last_login)
+      VALUES (?, ?, ?, ?, 'CUSTOMER', 'ACTIVE', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).run(name.trim(), cleanEmail, cleanedMobile, passwordHash);
+
+    const newUser = db.prepare('SELECT id, name, email, mobile, profile_image, address, role, status, last_login FROM users WHERE id = ?').get(insert.lastInsertRowid);
+
+    // Record login history
+    db.prepare(`
+      INSERT INTO login_history (user_id, role, ip_address, user_agent)
+      VALUES (?, 'CUSTOMER', ?, ?)
+    `).run(newUser.id, ip, userAgent);
+
+    const token = jwt.sign(
+      { id: newUser.id, email: newUser.email, role: newUser.role, type: 'customer' },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
+    res.json({
+      token,
+      user: newUser,
+      is_admin: false,
+      message: 'Account created successfully!'
+    });
+  } catch (err) {
+    console.error('Registration error:', err);
+    res.status(500).json({ error: 'Registration failed. Please try again.' });
+  }
+});
+
+// Unified Login for Customer and Admin
+router.post('/login', (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required.' });
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+    const ip = req.ip || req.headers['x-forwarded-for'] || '127.0.0.1';
+    const userAgent = req.headers['user-agent'] || 'Unknown';
+
+    // 1. Check Admin Table First
+    const admin = db.prepare('SELECT * FROM admins WHERE email = ?').get(cleanEmail);
+    if (admin) {
+      if (admin.status !== 'ACTIVE') {
+        return res.status(403).json({ error: 'Admin account has been deactivated.' });
+      }
+
+      const adminPasswordMatch = bcrypt.compareSync(password, admin.password_hash);
+      if (adminPasswordMatch) {
+        db.prepare('UPDATE admins SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(admin.id);
+        db.prepare('INSERT INTO login_history (admin_id, role, ip_address, user_agent) VALUES (?, ?, ?, ?)').run(admin.id, admin.role, ip, userAgent);
+
+        const token = jwt.sign(
+          { id: admin.id, email: admin.email, role: admin.role, type: 'admin' },
+          JWT_SECRET,
+          { expiresIn: '7d' }
+        );
+
+        return res.json({
+          token,
+          user: {
+            id: admin.id,
+            name: admin.name,
+            email: admin.email,
+            role: admin.role,
+            status: admin.status
+          },
+          is_admin: true
+        });
+      }
+    }
+
+    // 2. Check Customer Users Table
+    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(cleanEmail);
+    if (user) {
+      if (user.status !== 'ACTIVE') {
+        return res.status(403).json({ error: 'Account has been deactivated.' });
+      }
+
+      if (!user.password_hash) {
+        return res.status(400).json({
+          error: 'This account was created with Google. Please use "Continue with Google" to sign in.'
+        });
+      }
+
+      const customerPasswordMatch = bcrypt.compareSync(password, user.password_hash);
+      if (customerPasswordMatch) {
+        db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP, login_count = login_count + 1 WHERE id = ?').run(user.id);
+        db.prepare('INSERT INTO login_history (user_id, role, ip_address, user_agent) VALUES (?, ?, ?, ?)').run(user.id, user.role, ip, userAgent);
+
+        const token = jwt.sign(
+          { id: user.id, email: user.email, role: user.role, type: 'customer' },
+          JWT_SECRET,
+          { expiresIn: '30d' }
+        );
+
+        return res.json({
+          token,
+          user: {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            mobile: user.mobile,
+            profile_image: user.profile_image,
+            address: user.address,
+            role: user.role,
+            status: user.status
+          },
+          is_admin: false
+        });
+      }
+    }
+
+    return res.status(401).json({ error: 'Invalid email or password.' });
+  } catch (err) {
+    console.error('Unified login error:', err);
+    res.status(500).json({ error: 'Authentication failed. Please try again.' });
+  }
+});
+
+// Admin Login (Kept for compatibility)
 router.post('/admin/login', (req, res) => {
   try {
     const { email, password } = req.body;

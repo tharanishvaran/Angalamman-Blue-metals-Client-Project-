@@ -24,6 +24,7 @@ function initDatabase() {
       google_id TEXT UNIQUE,
       name TEXT NOT NULL,
       email TEXT UNIQUE NOT NULL,
+      password_hash TEXT,
       mobile TEXT,
       profile_image TEXT,
       address TEXT,
@@ -35,6 +36,13 @@ function initDatabase() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+  `);
+
+  try {
+    db.prepare('ALTER TABLE users ADD COLUMN password_hash TEXT').run();
+  } catch (e) {
+    // Column already exists
+  }
 
     CREATE TABLE IF NOT EXISTS admins (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

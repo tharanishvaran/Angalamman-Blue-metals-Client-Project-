@@ -101,6 +101,8 @@ export default function App() {
             setQuoteModalOpen(true);
           }
         }, 120);
+      } else {
+        setActiveView('customer-dashboard');
       }
     }
   };
@@ -116,8 +118,7 @@ export default function App() {
   const handleOpenQuoteWithMaterial = (materialName = '') => {
     if (!user) {
       setPendingAction({ type: 'quote', material: materialName });
-      setAuthBannerMessage('Please sign in with Google to request an official quotation');
-      setAuthInitialMode('customer');
+      setAuthBannerMessage('Please sign in with Google or Email to request an official quotation');
       setAuthModalOpen(true);
       return;
     }
@@ -128,8 +129,7 @@ export default function App() {
   const handleOpenDeliveryWithMaterial = (materialName = '') => {
     if (!user) {
       setPendingAction({ type: 'delivery', material: materialName });
-      setAuthBannerMessage('Please sign in with Google to book material delivery');
-      setAuthInitialMode('customer');
+      setAuthBannerMessage('Please sign in with Google or Email to book material delivery');
       setAuthModalOpen(true);
       return;
     }
@@ -163,6 +163,7 @@ export default function App() {
           onOpenDelivery={() => handleOpenDeliveryWithMaterial()}
           onViewInvoice={(inv) => setViewingInvoice(inv)}
           onProfileUpdated={(updated) => setUser(updated)}
+          onLogout={handleLogout}
         />
       ) : (
         /* View 3: Public Website */
