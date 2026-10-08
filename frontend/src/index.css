@@ -86,16 +86,27 @@ html {
   line-height: 1.65;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* Prevent layout shift from scrollbar */
+  -webkit-overflow-scrolling: touch;
+  overflow-x: hidden;
+  width: 100%;
   scrollbar-gutter: stable;
   text-rendering: optimizeLegibility;
 }
 
 body {
   overflow-x: hidden;
+  width: 100%;
+  max-width: 100vw;
   min-height: 100vh;
   background-color: var(--bg-darkest);
   color: var(--text-main);
+  position: relative;
+}
+
+#root {
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100vw;
   position: relative;
 }
 
@@ -112,7 +123,7 @@ body {
     #03070f;
   transform: translate3d(0, 0, 0);
   backface-visibility: hidden;
-  perspective: 1000px;
+  will-change: transform;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -636,7 +647,7 @@ select.form-control option { background: #0b1628; color: var(--text-main); }
   background: linear-gradient(90deg, rgba(255,255,255,0.08), transparent);
 }
 
-/* ─── Particle Dots Background ───────────────────── */
+/* ─── Particle Dots Background (Static GPU Layer) ─── */
 .particle-bg {
   position: absolute;
   inset: 0;
@@ -650,15 +661,12 @@ select.form-control option { background: #0b1628; color: var(--text-main); }
   width: 100%;
   height: 100%;
   background-image:
-    radial-gradient(rgba(37, 99, 235, 0.15) 1px, transparent 1px),
-    radial-gradient(rgba(249, 115, 22, 0.1) 1px, transparent 1px);
+    radial-gradient(rgba(37, 99, 235, 0.12) 1px, transparent 1px),
+    radial-gradient(rgba(249, 115, 22, 0.08) 1px, transparent 1px);
   background-size: 40px 40px, 70px 70px;
   background-position: 0 0, 20px 20px;
-  animation: particleDrift 25s linear infinite;
-}
-@keyframes particleDrift {
-  from { transform: translateY(0px) translateX(0px); }
-  to   { transform: translateY(-40px) translateX(20px); }
+  transform: translate3d(0, 0, 0);
+  pointer-events: none;
 }
 
 /* ─── Hero Specific ──────────────────────────────── */

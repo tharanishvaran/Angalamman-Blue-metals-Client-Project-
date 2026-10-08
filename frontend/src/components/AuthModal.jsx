@@ -182,16 +182,23 @@ export default function AuthModal({
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 9999 }}>
+    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 9999, padding: '0.75rem' }}>
       <div 
         className="modal-content" 
         onClick={(e) => e.stopPropagation()} 
-        style={{ maxWidth: '460px', maxHeight: '90vh', overflowY: 'auto', padding: '2rem' }}
+        style={{ 
+          maxWidth: '460px', 
+          width: '100%', 
+          maxHeight: '92vh', 
+          overflowY: 'auto', 
+          padding: '1.75rem 1.25rem',
+          boxSizing: 'border-box'
+        }}
       >
         {/* Close Button */}
         <button
           onClick={onClose}
-          style={{ position: 'absolute', top: '1.25rem', right: '1.25rem', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+          style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '0.25rem', zIndex: 10 }}
           aria-label="Close"
         >
           <X size={20} />
@@ -263,8 +270,8 @@ export default function AuthModal({
             )}
 
             {/* OPTION 1: Continue with Google (Original Google OAuth) */}
-            <div style={{ marginBottom: '1.25rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+            <div style={{ marginBottom: '1.25rem', width: '100%', display: 'flex', justifyContent: 'center' }}>
+              <div style={{ display: 'flex', justifyContent: 'center', width: '100%', maxWidth: '340px' }}>
                 <GoogleLogin
                   onSuccess={(credentialResponse) => handleGoogleAuthToken(credentialResponse.credential)}
                   onError={() => setGeneralError('Google Sign-In was cancelled or failed.')}
@@ -272,7 +279,7 @@ export default function AuthModal({
                   size="large"
                   shape="pill"
                   text="continue_with"
-                  width="360"
+                  width="300"
                   logo_alignment="left"
                 />
               </div>

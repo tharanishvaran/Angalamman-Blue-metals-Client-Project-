@@ -1,4 +1,5 @@
-const API_BASE = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000/api' : '/api');
+const PRIMARY_API = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000/api' : '/api');
+const CLOUD_FALLBACK_API = 'https://angalamman-blue-metals.onrender.com/api';
 
 function getHeaders(isJson = true) {
   const headers = {};
@@ -10,19 +11,42 @@ function getHeaders(isJson = true) {
 
 async function request(endpoint, options = {}) {
   const isFormData = options.body instanceof FormData;
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers: {
-      ...getHeaders(!isFormData),
-      ...(options.headers || {})
-    }
-  });
+  const headers = {
+    ...getHeaders(!isFormData),
+    ...(options.headers || {})
+  };
 
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(data.error || 'Server error occurred');
+  try {
+    const res = await fetch(`${PRIMARY_API}${endpoint}`, {
+      ...options,
+      headers
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'Server error occurred');
+    }
+    return data;
+  } catch (err) {
+    // If local network error / connection refused, try cloud fallback
+    const isNetworkError = err.name === 'TypeError' || (err.message && err.message.toLowerCase().includes('fetch'));
+    if (isNetworkError && PRIMARY_API !== CLOUD_FALLBACK_API) {
+      try {
+        console.warn(`Local API at ${PRIMARY_API} unreachable. Retrying with cloud API: ${CLOUD_FALLBACK_API}...`);
+        const fallbackRes = await fetch(`${CLOUD_FALLBACK_API}${endpoint}`, {
+          ...options,
+          headers
+        });
+        const fallbackData = await fallbackRes.json().catch(() => ({}));
+        if (!fallbackRes.ok) {
+          throw new Error(fallbackData.error || 'Server error occurred');
+        }
+        return fallbackData;
+      } catch (cloudErr) {
+        throw new Error(cloudErr.message || 'Unable to connect to the server. Please check your internet connection.');
+      }
+    }
+    throw err;
   }
-  return data;
 }
 
 export const api = {

@@ -36,13 +36,6 @@ function initDatabase() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
-  `);
-
-  try {
-    db.prepare('ALTER TABLE users ADD COLUMN password_hash TEXT').run();
-  } catch (e) {
-    // Column already exists
-  }
 
     CREATE TABLE IF NOT EXISTS admins (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -199,6 +192,12 @@ function initDatabase() {
       value TEXT NOT NULL
     );
   `);
+
+  try {
+    db.prepare('ALTER TABLE users ADD COLUMN password_hash TEXT').run();
+  } catch (e) {
+    // Column already exists or already migrated
+  }
 
   // Seed default Super Admin if none exists
   const adminCount = db.prepare('SELECT COUNT(*) as count FROM admins').get();

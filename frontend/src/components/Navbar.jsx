@@ -27,14 +27,22 @@ export default function Navbar({
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
 
   useEffect(() => {
+    let ticking = false;
+    let lastState = false;
     const handleScroll = () => {
-      if (window.scrollY > 30) {
-        setIsScrolled(true);
-      } else {
-        setIsScrolled(false);
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const current = window.scrollY > 30;
+          if (current !== lastState) {
+            lastState = current;
+            setIsScrolled(current);
+          }
+          ticking = false;
+        });
+        ticking = true;
       }
     };
-    window.addEventListener('scroll', handleScroll);
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 

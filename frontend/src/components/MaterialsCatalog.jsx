@@ -122,8 +122,8 @@ export default function MaterialsCatalog({
         {/* Materials Grid */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))',
-          gap: '2rem'
+          gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))',
+          gap: '1.5rem'
         }}>
           {filteredMaterials.map((material, idx) => (
             <div 

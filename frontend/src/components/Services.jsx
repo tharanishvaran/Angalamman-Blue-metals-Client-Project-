@@ -44,8 +44,8 @@ export default function Services({ services = [], onSelectServiceQuote }) {
         {/* Services Grid */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))',
-          gap: '2rem'
+          gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))',
+          gap: '1.5rem'
         }}>
           {services.map((service, idx) => (
             <AnimatedSection

@@ -63,8 +63,8 @@ export default function WhyChooseUs() {
         {/* 6 Grid Cards */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))',
-          gap: '2rem'
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
+          gap: '1.5rem'
         }}>
           {reasons.map((r, i) => (
             <AnimatedSection 
