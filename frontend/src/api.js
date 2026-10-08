@@ -9,6 +9,19 @@ function getHeaders(isJson = true) {
   return headers;
 }
 
+async function fetchWithTimeout(url, options = {}, timeoutMs = 2500) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(timeoutId);
+    return res;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err;
+  }
+}
+
 async function request(endpoint, options = {}) {
   const isFormData = options.body instanceof FormData;
   const headers = {
@@ -17,10 +30,10 @@ async function request(endpoint, options = {}) {
   };
 
   try {
-    const res = await fetch(`${PRIMARY_API}${endpoint}`, {
+    const res = await fetchWithTimeout(`${PRIMARY_API}${endpoint}`, {
       ...options,
       headers
-    });
+    }, 2500);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       throw new Error(data.error || 'Server error occurred');
@@ -28,21 +41,20 @@ async function request(endpoint, options = {}) {
     return data;
   } catch (err) {
     // If local network error / connection refused, try cloud fallback
-    const isNetworkError = err.name === 'TypeError' || (err.message && err.message.toLowerCase().includes('fetch'));
+    const isNetworkError = err.name === 'TypeError' || err.name === 'AbortError' || (err.message && err.message.toLowerCase().includes('fetch'));
     if (isNetworkError && PRIMARY_API !== CLOUD_FALLBACK_API) {
       try {
-        console.warn(`Local API at ${PRIMARY_API} unreachable. Retrying with cloud API: ${CLOUD_FALLBACK_API}...`);
-        const fallbackRes = await fetch(`${CLOUD_FALLBACK_API}${endpoint}`, {
+        const fallbackRes = await fetchWithTimeout(`${CLOUD_FALLBACK_API}${endpoint}`, {
           ...options,
           headers
-        });
+        }, 3500);
         const fallbackData = await fallbackRes.json().catch(() => ({}));
         if (!fallbackRes.ok) {
           throw new Error(fallbackData.error || 'Server error occurred');
         }
         return fallbackData;
       } catch (cloudErr) {
-        throw new Error(cloudErr.message || 'Unable to connect to the server. Please check your internet connection.');
+        throw new Error(cloudErr.message || 'Unable to connect to the server.');
       }
     }
     throw err;

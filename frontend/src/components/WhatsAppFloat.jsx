@@ -1,7 +1,24 @@
-import React from 'react';
-import { Phone, MessageSquare, FileText } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Phone, MessageSquare, FileText, ArrowUp } from 'lucide-react';
 
 export default function WhatsAppFloat({ settings, onOpenQuote }) {
+  const [showScrollTop, setShowScrollTop] = useState(false);
+
+  useEffect(() => {
+    const checkScroll = () => {
+      setShowScrollTop(window.scrollY > 350);
+    };
+    window.addEventListener('scroll', checkScroll, { passive: true });
+    return () => window.removeEventListener('scroll', checkScroll);
+  }, []);
+
+  const scrollToTop = () => {
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    });
+  };
+
   const whatsappNumber = settings.whatsapp_number || '9944076675';
   const primaryPhone = settings.phone_primary || '9944076675';
   const message = 'Hello Sri Angalamman Blue Metals, I would like to know the price and availability of construction materials.';
@@ -9,6 +26,37 @@ export default function WhatsAppFloat({ settings, onOpenQuote }) {
 
   return (
     <>
+      {/* Smooth Scroll To Top Button */}
+      {showScrollTop && (
+        <button
+          onClick={scrollToTop}
+          title="Scroll smoothly to top"
+          aria-label="Scroll to top"
+          style={{
+            position: 'fixed',
+            bottom: '6.8rem',
+            right: '2.3rem',
+            zIndex: 899,
+            width: '46px',
+            height: '46px',
+            borderRadius: '50%',
+            background: 'rgba(10, 18, 38, 0.88)',
+            backdropFilter: 'blur(12px)',
+            border: '1.5px solid rgba(56, 189, 248, 0.4)',
+            color: '#38bdf8',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.6), 0 0 16px rgba(56, 189, 248, 0.25)',
+            transition: 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), background 0.2s, box-shadow 0.25s',
+            animation: 'fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
+          }}
+          className="hover-lift"
+        >
+          <ArrowUp size={20} />
+        </button>
+      )}
       {/* Floating WhatsApp Bubble with Notification Badge */}
       <a
         href={whatsappUrl}

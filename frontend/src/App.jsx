@@ -23,13 +23,19 @@ import CustomerDashboard from './pages/CustomerDashboard';
 import AdminPortal from './pages/AdminPortal';
 
 import { api } from './api';
+import { 
+  DEFAULT_SETTINGS, 
+  DEFAULT_MATERIALS, 
+  DEFAULT_SERVICES, 
+  DEFAULT_REVIEWS 
+} from './defaultData';
 
 export default function App() {
-  // Global Data State
-  const [settings, setSettings] = useState({});
-  const [materials, setMaterials] = useState([]);
-  const [services, setServices] = useState([]);
-  const [reviews, setReviews] = useState([]);
+  // Global Data State initialized with instant offline fallbacks
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const [materials, setMaterials] = useState(DEFAULT_MATERIALS);
+  const [services, setServices] = useState(DEFAULT_SERVICES);
+  const [reviews, setReviews] = useState(DEFAULT_REVIEWS);
 
   // Auth State
   const [user, setUser] = useState(null);
@@ -65,17 +71,25 @@ export default function App() {
   const loadInitialData = async () => {
     try {
       const [sets, mats, srvs, revs] = await Promise.all([
-        api.getSettings().catch(() => ({})),
-        api.getMaterials().catch(() => []),
-        api.getServices().catch(() => []),
-        api.getReviews().catch(() => [])
+        api.getSettings().catch(() => null),
+        api.getMaterials().catch(() => null),
+        api.getServices().catch(() => null),
+        api.getReviews().catch(() => null)
       ]);
-      setSettings(sets);
-      setMaterials(mats);
-      setServices(srvs);
-      setReviews(revs);
+      if (sets && Object.keys(sets).length > 0) {
+        setSettings(prev => ({ ...prev, ...sets }));
+      }
+      if (mats && Array.isArray(mats) && mats.length > 0) {
+        setMaterials(mats);
+      }
+      if (srvs && Array.isArray(srvs) && srvs.length > 0) {
+        setServices(srvs);
+      }
+      if (revs && Array.isArray(revs) && revs.length > 0) {
+        setReviews(revs);
+      }
     } catch (err) {
-      console.error('Initialization error:', err);
+      console.warn('API sync warning (using preloaded defaults):', err);
     }
   };
 
@@ -257,6 +271,7 @@ export default function App() {
         isOpen={quoteModalOpen}
         onClose={() => setQuoteModalOpen(false)}
         initialMaterial={selectedMaterialForModal}
+        materials={materials}
         user={user}
         onRequireLogin={() => {
           setQuoteModalOpen(false);
@@ -271,6 +286,7 @@ export default function App() {
         isOpen={deliveryModalOpen}
         onClose={() => setDeliveryModalOpen(false)}
         initialMaterial={selectedMaterialForModal}
+        materials={materials}
         user={user}
         onRequireLogin={() => {
           setDeliveryModalOpen(false);

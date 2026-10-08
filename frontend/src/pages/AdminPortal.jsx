@@ -23,8 +23,21 @@ import {
   ArrowLeft,
   DollarSign,
   Image as ImageIcon,
-  Upload
+  Upload,
+  UserCheck,
+  UserX,
+  Globe,
+  Mail,
+  PhoneCall,
+  MessageCircle,
+  Eye,
+  RefreshCw,
+  Lock,
+  Key,
+  Shield,
+  Smartphone
 } from 'lucide-react';
+import BrandLogo from '../components/BrandLogo';
 import { api } from '../api';
 
 export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, onDataUpdated }) {
@@ -59,9 +72,20 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
   });
   const [billingSuccess, setBillingSuccess] = useState('');
 
-  // Admin User Creation Modal
+  // Admin User Creation & Edit Modals State
   const [adminModalOpen, setAdminModalOpen] = useState(false);
   const [adminForm, setAdminForm] = useState({ name: '', email: '', password: '', role: 'ADMIN' });
+  const [editAdminModalOpen, setEditAdminModalOpen] = useState(false);
+  const [editAdminForm, setEditAdminForm] = useState({ id: null, name: '', email: '', role: 'ADMIN', status: 'ACTIVE', password: '' });
+  const [adminSearch, setAdminSearch] = useState('');
+  const [adminRoleFilter, setAdminRoleFilter] = useState('All');
+
+  // Customer Directory & Logged-in Customer Tracker State
+  const [customerFilterTab, setCustomerFilterTab] = useState('logged_in'); // 'logged_in', 'all', 'google', 'email'
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [customerModalOpen, setCustomerModalOpen] = useState(false);
+  const [selectedCustomerDetail, setSelectedCustomerDetail] = useState(null);
+  const [customerModalLoading, setCustomerModalLoading] = useState(false);
 
   // Settings form
   const [settingsForm, setSettingsForm] = useState({});
@@ -108,7 +132,7 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
       } else if (activeSection === 'customers') {
         const custs = await api.getCustomers();
         setCustomers(custs);
-      } else if (activeSection === 'admins' && admin.role === 'SUPER_ADMIN') {
+      } else if (activeSection === 'admins') {
         const admins = await api.getAdmins();
         setAdminUsers(admins);
       } else if (activeSection === 'reviews') {
@@ -314,14 +338,12 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
         flexShrink: 0
       }}>
         {/* Sidebar Brand */}
-        <div style={{ padding: '1.5rem', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <div style={{ padding: '0.4rem', borderRadius: '8px', background: 'linear-gradient(135deg, #2563eb, #f97316)' }}>
-              <Truck size={20} color="#fff" />
-            </div>
+        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <BrandLogo size={38} showRing={true} showAura={true} showShine={true} />
             <div>
-              <div style={{ fontWeight: 800, fontSize: '1rem', color: '#fff' }}>Sri Angalamman</div>
-              <div style={{ fontSize: '0.7rem', color: '#fb923c', fontWeight: 700 }}>ADMIN CONTROL</div>
+              <div style={{ fontWeight: 800, fontSize: '0.98rem', color: '#fff' }}>Sri Angalamman</div>
+              <div style={{ fontSize: '0.68rem', color: '#fb923c', fontWeight: 800, letterSpacing: '0.06em' }}>ADMIN PORTAL</div>
             </div>
           </div>
         </div>
@@ -335,9 +357,9 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
             { id: 'deliveries', label: 'Site Deliveries', icon: <Truck size={18} /> },
             { id: 'quotes', label: 'Quotation Requests', icon: <FileText size={18} /> },
             { id: 'invoices', label: 'Billing & Invoices', icon: <Receipt size={18} /> },
-            { id: 'customers', label: 'Customer Directory', icon: <Users size={18} /> },
+            { id: 'customers', label: 'Customer Directory & Logins', icon: <Users size={18} /> },
             { id: 'reviews', label: 'Reviews & Feedback', icon: <Star size={18} /> },
-            ...(admin.role === 'SUPER_ADMIN' ? [{ id: 'admins', label: 'Staff & Roles', icon: <ShieldCheck size={18} /> }] : []),
+            { id: 'admins', label: 'Admin Users & Staff', icon: <ShieldCheck size={18} /> },
             { id: 'settings', label: 'Business Settings', icon: <SettingsIcon size={18} /> },
           ].map((item) => (
             <button
@@ -920,8 +942,19 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                           <div style={{ color: '#fff', fontWeight: 600 }}>{del.customer_name}</div>
                           <div style={{ color: '#94a3b8', fontSize: '0.8rem' }}>{del.customer_mobile}</div>
                         </td>
-                        <td style={{ padding: '0.85rem 1rem', color: '#fff' }}>{del.quantity} {del.unit} of {del.material_name}</td>
-                        <td style={{ padding: '0.85rem 1rem', color: '#cbd5e1', maxWidth: '240px' }}>{del.delivery_address}</td>
+                        <td style={{ padding: '0.85rem 1rem', color: '#cbd5e1', maxWidth: '240px' }}>
+                          <div style={{ wordBreak: 'break-word' }}>{del.delivery_address}</div>
+                          {del.delivery_address && del.delivery_address.match(/https?:\/\/[^\s\)]+/) && (
+                            <a
+                              href={del.delivery_address.match(/https?:\/\/[^\s\)]+/)[0]}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: '#38bdf8', fontSize: '0.76rem', fontWeight: 700, marginTop: '4px', textDecoration: 'none' }}
+                            >
+                              <MapPin size={12} /> Open Maps Link <ExternalLink size={10} />
+                            </a>
+                          )}
+                        </td>
                         <td style={{ padding: '0.85rem 1rem' }}>
                           <span className={`badge ${del.status === 'Delivered' ? 'badge-green' : del.status === 'Cancelled' ? 'badge-red' : 'badge-orange'}`}>
                             {del.status}
@@ -1249,45 +1282,336 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
             </div>
           )}
 
-          {/* TAB 6: CUSTOMER DIRECTORY (Section 20) */}
+          {/* TAB 6: CUSTOMER DIRECTORY & LOGIN TRACKER */}
           {activeSection === 'customers' && (
             <div>
-              <p style={{ color: '#94a3b8', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-                All registered customer profiles, login frequencies, and mobile numbers.
-              </p>
+              {/* Top Metrics Bar */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div className="glass-card" style={{ padding: '1.25rem', borderRadius: '12px', borderLeft: '4px solid #10b981' }}>
+                  <div style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Logged-In Customers</div>
+                  <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#34d399', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <UserCheck size={24} />
+                    {customers.filter(c => (c.login_count > 0 || c.last_login)).length}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>Customers with active web logins</div>
+                </div>
 
+                <div className="glass-card" style={{ padding: '1.25rem', borderRadius: '12px', borderLeft: '4px solid #3b82f6' }}>
+                  <div style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Total Registered Accounts</div>
+                  <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#60a5fa', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Users size={24} />
+                    {customers.length}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>All customer profiles in database</div>
+                </div>
+
+                <div className="glass-card" style={{ padding: '1.25rem', borderRadius: '12px', borderLeft: '4px solid #f97316' }}>
+                  <div style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Google Verified Logins</div>
+                  <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#fb923c', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Globe size={24} />
+                    {customers.filter(c => c.is_google_user).length}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>OAuth 1-click Google users</div>
+                </div>
+
+                <div className="glass-card" style={{ padding: '1.25rem', borderRadius: '12px', borderLeft: '4px solid #8b5cf6' }}>
+                  <div style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Active in Last 7 Days</div>
+                  <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#c4b5fd', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Clock size={24} />
+                    {customers.filter(c => c.last_login && (new Date() - new Date(c.last_login)) < 7 * 86400000).length}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>Recent site sessions</div>
+                </div>
+              </div>
+
+              {/* Filter Tabs & Search Bar */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '1.25rem' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                  {[
+                    { id: 'logged_in', label: `Logged-In Customers (${customers.filter(c => (c.login_count > 0 || c.last_login)).length})`, icon: <UserCheck size={14} /> },
+                    { id: 'all', label: `All Users (${customers.length})`, icon: <Users size={14} /> },
+                    { id: 'google', label: `Google (${customers.filter(c => c.is_google_user).length})`, icon: <Globe size={14} /> },
+                    { id: 'email', label: `Email Accounts (${customers.filter(c => !c.is_google_user).length})`, icon: <Mail size={14} /> },
+                    { id: 'recent', label: `Active (7 Days) (${customers.filter(c => c.last_login && (new Date() - new Date(c.last_login)) < 7 * 86400000).length})`, icon: <Clock size={14} /> }
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setCustomerFilterTab(tab.id)}
+                      style={{
+                        padding: '0.45rem 0.9rem',
+                        borderRadius: '9999px',
+                        border: '1px solid',
+                        borderColor: customerFilterTab === tab.id ? '#2563eb' : 'rgba(255, 255, 255, 0.12)',
+                        background: customerFilterTab === tab.id ? 'rgba(37, 99, 235, 0.25)' : 'rgba(255, 255, 255, 0.03)',
+                        color: customerFilterTab === tab.id ? '#60a5fa' : '#94a3b8',
+                        fontWeight: customerFilterTab === tab.id ? 700 : 500,
+                        fontSize: '0.82rem',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        transition: 'all 0.15s'
+                      }}
+                    >
+                      {tab.icon}
+                      <span>{tab.label}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: '260px', flex: '1 1 260px', maxWidth: '400px' }}>
+                  <div style={{ position: 'relative', width: '100%' }}>
+                    <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="Search customer name, mobile, email..."
+                      value={customerSearch}
+                      onChange={(e) => setCustomerSearch(e.target.value)}
+                      style={{ paddingLeft: '2.25rem', fontSize: '0.84rem', padding: '0.55rem 0.75rem 0.55rem 2.25rem' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Customer Directory Table */}
               <div className="glass-card" style={{ borderRadius: '14px', overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
                   <thead>
                     <tr style={{ background: 'rgba(255, 255, 255, 0.05)', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                      <th style={{ padding: '0.85rem 1rem' }}>Customer</th>
-                      <th style={{ padding: '0.85rem 1rem' }}>Mobile Number</th>
-                      <th style={{ padding: '0.85rem 1rem' }}>Google Email</th>
-                      <th style={{ padding: '0.85rem 1rem' }}>Logins</th>
-                      <th style={{ padding: '0.85rem 1rem' }}>Last Login</th>
-                      <th style={{ padding: '0.85rem 1rem' }}>Status</th>
+                      <th style={{ padding: '0.9rem 1rem' }}>Customer Profile</th>
+                      <th style={{ padding: '0.9rem 1rem' }}>Login Method</th>
+                      <th style={{ padding: '0.9rem 1rem' }}>Mobile / Phone</th>
+                      <th style={{ padding: '0.9rem 1rem' }}>Login Count</th>
+                      <th style={{ padding: '0.9rem 1rem' }}>Last Login Timestamp</th>
+                      <th style={{ padding: '0.9rem 1rem' }}>Status</th>
+                      <th style={{ padding: '0.9rem 1rem', textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {customers.map((c) => (
-                      <tr key={c.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
-                        <td style={{ padding: '0.85rem 1rem', fontWeight: 600, color: '#fff', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem' }}>
-                            {c.name ? c.name.charAt(0) : 'C'}
-                          </div>
-                          {c.name}
-                        </td>
-                        <td style={{ padding: '0.85rem 1rem', color: c.mobile ? '#34d399' : '#f87171', fontWeight: 600 }}>
-                          {c.mobile || 'Needs Verification'}
-                        </td>
-                        <td style={{ padding: '0.85rem 1rem', color: '#94a3b8' }}>{c.email}</td>
-                        <td style={{ padding: '0.85rem 1rem', color: '#fff' }}>{c.login_count || 1}</td>
-                        <td style={{ padding: '0.85rem 1rem', color: '#94a3b8' }}>{new Date(c.last_login).toLocaleDateString()}</td>
-                        <td style={{ padding: '0.85rem 1rem' }}>
-                          <span className="badge badge-green">{c.status}</span>
+                    {customers
+                      .filter((c) => {
+                        // Tab filters
+                        if (customerFilterTab === 'logged_in' && !(c.login_count > 0 || c.last_login)) return false;
+                        if (customerFilterTab === 'google' && !c.is_google_user) return false;
+                        if (customerFilterTab === 'email' && c.is_google_user) return false;
+                        if (customerFilterTab === 'recent') {
+                          if (!c.last_login) return false;
+                          const diff = new Date() - new Date(c.last_login);
+                          if (diff > 7 * 86400000) return false;
+                        }
+                        // Search query
+                        if (customerSearch) {
+                          const q = customerSearch.toLowerCase();
+                          const matchName = c.name && c.name.toLowerCase().includes(q);
+                          const matchEmail = c.email && c.email.toLowerCase().includes(q);
+                          const matchMobile = c.mobile && c.mobile.toLowerCase().includes(q);
+                          const matchAddr = c.address && c.address.toLowerCase().includes(q);
+                          return matchName || matchEmail || matchMobile || matchAddr;
+                        }
+                        return true;
+                      })
+                      .map((c) => (
+                        <tr key={c.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
+                          {/* Customer Profile */}
+                          <td style={{ padding: '0.85rem 1rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                              {c.profile_image ? (
+                                <img
+                                  src={c.profile_image}
+                                  alt={c.name}
+                                  referrerPolicy="no-referrer"
+                                  crossOrigin="anonymous"
+                                  style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', border: '1.5px solid rgba(59, 130, 246, 0.5)' }}
+                                />
+                              ) : (
+                                <div style={{
+                                  width: '36px',
+                                  height: '36px',
+                                  borderRadius: '50%',
+                                  background: 'linear-gradient(135deg, #1d4ed8, #2563eb)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: '0.9rem',
+                                  fontWeight: 700,
+                                  color: '#fff',
+                                  flexShrink: 0
+                                }}>
+                                  {c.name ? c.name.charAt(0).toUpperCase() : 'C'}
+                                </div>
+                              )}
+                              <div>
+                                <div style={{ fontWeight: 700, color: '#fff', fontSize: '0.92rem' }}>{c.name || 'Anonymous User'}</div>
+                                <div style={{ fontSize: '0.74rem', color: '#94a3b8' }}>{c.email}</div>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Login Method */}
+                          <td style={{ padding: '0.85rem 1rem' }}>
+                            {c.is_google_user ? (
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.35rem',
+                                padding: '0.28rem 0.65rem',
+                                borderRadius: '9999px',
+                                background: 'rgba(234, 67, 53, 0.12)',
+                                border: '1px solid rgba(234, 67, 53, 0.3)',
+                                color: '#f87171',
+                                fontSize: '0.75rem',
+                                fontWeight: 700
+                              }}>
+                                <Globe size={12} /> Google Account
+                              </span>
+                            ) : (
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.35rem',
+                                padding: '0.28rem 0.65rem',
+                                borderRadius: '9999px',
+                                background: 'rgba(56, 189, 248, 0.12)',
+                                border: '1px solid rgba(56, 189, 248, 0.3)',
+                                color: '#38bdf8',
+                                fontSize: '0.75rem',
+                                fontWeight: 700
+                              }}>
+                                <Mail size={12} /> Email & Password
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Mobile */}
+                          <td style={{ padding: '0.85rem 1rem' }}>
+                            {c.mobile ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                <span style={{ fontWeight: 600, color: '#34d399', fontSize: '0.86rem' }}>+91 {c.mobile}</span>
+                                <a
+                                  href={`tel:${c.mobile}`}
+                                  title="Call Customer"
+                                  style={{ color: '#38bdf8', padding: '2px', display: 'inline-flex' }}
+                                >
+                                  <PhoneCall size={13} />
+                                </a>
+                                <a
+                                  href={`https://wa.me/91${c.mobile}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title="WhatsApp Customer"
+                                  style={{ color: '#10b981', padding: '2px', display: 'inline-flex' }}
+                                >
+                                  <MessageCircle size={13} />
+                                </a>
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: '0.76rem', color: '#f87171', fontStyle: 'italic' }}>Pending Verification</span>
+                            )}
+                          </td>
+
+                          {/* Login Frequency Count */}
+                          <td style={{ padding: '0.85rem 1rem' }}>
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.3rem',
+                              padding: '0.25rem 0.6rem',
+                              borderRadius: '6px',
+                              background: (c.login_count || 0) > 3 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                              color: (c.login_count || 0) > 3 ? '#34d399' : '#e2e8f0',
+                              fontWeight: 700,
+                              fontSize: '0.8rem'
+                            }}>
+                              <Clock size={12} />
+                              {(c.login_count || 1)} {c.login_count === 1 ? 'Login' : 'Logins'}
+                            </span>
+                          </td>
+
+                          {/* Last Login Timestamp */}
+                          <td style={{ padding: '0.85rem 1rem', color: '#cbd5e1', fontSize: '0.82rem' }}>
+                            {c.last_login ? (
+                              <div>
+                                <div style={{ fontWeight: 600, color: '#f8fafc' }}>
+                                  {new Date(c.last_login).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                </div>
+                                <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                                  {new Date(c.last_login).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                                </div>
+                              </div>
+                            ) : (
+                              <span style={{ color: '#64748b' }}>No session recorded</span>
+                            )}
+                          </td>
+
+                          {/* Status */}
+                          <td style={{ padding: '0.85rem 1rem' }}>
+                            <button
+                              onClick={async () => {
+                                const newStatus = c.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE';
+                                if (window.confirm(`Set status of ${c.name} to ${newStatus}?`)) {
+                                  await api.toggleCustomerStatus(c.id, newStatus);
+                                  loadAllAdminData();
+                                }
+                              }}
+                              style={{
+                                border: 'none',
+                                background: 'transparent',
+                                cursor: 'pointer',
+                                padding: 0
+                              }}
+                              title="Click to toggle status"
+                            >
+                              <span className={`badge ${c.status === 'ACTIVE' ? 'badge-green' : 'badge-red'}`} style={{ cursor: 'pointer' }}>
+                                {c.status}
+                              </span>
+                            </button>
+                          </td>
+
+                          {/* Actions */}
+                          <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
+                            <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    setCustomerModalLoading(true);
+                                    setCustomerModalOpen(true);
+                                    const details = await api.getCustomerDetails(c.id);
+                                    setSelectedCustomerDetail(details);
+                                  } catch (err) {
+                                    alert(err.message || 'Failed to load customer profile');
+                                  } finally {
+                                    setCustomerModalLoading(false);
+                                  }
+                                }}
+                                className="btn btn-outline btn-sm"
+                                style={{ fontSize: '0.76rem', padding: '0.35rem 0.65rem' }}
+                                title="View Login Sessions & Orders"
+                              >
+                                <Eye size={13} /> Activity
+                              </button>
+                              <button
+                                onClick={() => {
+                                  handleSelectCustomerForBilling(c.id);
+                                  setActiveSection('invoices');
+                                }}
+                                className="btn btn-primary btn-sm"
+                                style={{ fontSize: '0.76rem', padding: '0.35rem 0.65rem' }}
+                                title="Create Invoice for Customer"
+                              >
+                                Bill
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    {customers.length === 0 && (
+                      <tr>
+                        <td colSpan="7" style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
+                          No customer accounts found yet.
                         </td>
                       </tr>
-                    ))}
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -1344,56 +1668,206 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
             </div>
           )}
 
-          {/* TAB 8: STAFF & ROLES (SUPER_ADMIN ONLY - Section 19) */}
-          {activeSection === 'admins' && admin.role === 'SUPER_ADMIN' && (
+          {/* TAB 8: ADMIN USERS & STAFF MANAGEMENT */}
+          {activeSection === 'admins' && (
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>Manage administrative accounts and permission levels.</p>
-                <button onClick={() => setAdminModalOpen(true)} className="btn btn-primary btn-sm">
-                  <Plus size={15} /> Add Administrator
+              {/* Top Metrics Cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div className="glass-card" style={{ padding: '1.25rem', borderRadius: '12px', borderLeft: '4px solid #3b82f6' }}>
+                  <div style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Total Administrators</div>
+                  <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#60a5fa', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <ShieldCheck size={24} />
+                    {adminUsers.length}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>All staff & admin accounts</div>
+                </div>
+
+                <div className="glass-card" style={{ padding: '1.25rem', borderRadius: '12px', borderLeft: '4px solid #10b981' }}>
+                  <div style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Active Admins</div>
+                  <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#34d399', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <UserCheck size={24} />
+                    {adminUsers.filter(a => a.status === 'ACTIVE').length}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>Enabled credentials</div>
+                </div>
+
+                <div className="glass-card" style={{ padding: '1.25rem', borderRadius: '12px', borderLeft: '4px solid #ef4444' }}>
+                  <div style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Super Admins</div>
+                  <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#f87171', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Shield size={24} />
+                    {adminUsers.filter(a => a.role === 'SUPER_ADMIN').length}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>Full management privilege</div>
+                </div>
+
+                <div className="glass-card" style={{ padding: '1.25rem', borderRadius: '12px', borderLeft: '4px solid #f97316' }}>
+                  <div style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Your Current Role</div>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fb923c', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <Key size={20} />
+                    {admin.role}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>{admin.email}</div>
+                </div>
+              </div>
+
+              {/* Action Bar */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: '1 1 300px', maxWidth: '420px' }}>
+                  <div style={{ position: 'relative', width: '100%' }}>
+                    <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="Search admin name or email..."
+                      value={adminSearch}
+                      onChange={(e) => setAdminSearch(e.target.value)}
+                      style={{ paddingLeft: '2.25rem', fontSize: '0.84rem' }}
+                    />
+                  </div>
+
+                  <select
+                    className="form-control"
+                    value={adminRoleFilter}
+                    onChange={(e) => setAdminRoleFilter(e.target.value)}
+                    style={{ width: '140px', fontSize: '0.84rem' }}
+                  >
+                    <option value="All">All Roles</option>
+                    <option value="SUPER_ADMIN">Super Admin</option>
+                    <option value="ADMIN">Admin</option>
+                    <option value="STAFF">Staff</option>
+                  </select>
+                </div>
+
+                <button onClick={() => setAdminModalOpen(true)} className="btn btn-primary btn-sm" style={{ fontWeight: 600 }}>
+                  <Plus size={16} /> Add New Administrator
                 </button>
               </div>
 
+              {/* Admins Table */}
               <div className="glass-card" style={{ borderRadius: '14px', overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
                   <thead>
                     <tr style={{ background: 'rgba(255, 255, 255, 0.05)', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                      <th style={{ padding: '0.85rem 1rem' }}>Name</th>
-                      <th style={{ padding: '0.85rem 1rem' }}>Email</th>
-                      <th style={{ padding: '0.85rem 1rem' }}>Role</th>
-                      <th style={{ padding: '0.85rem 1rem' }}>Status</th>
-                      <th style={{ padding: '0.85rem 1rem' }}>Last Login</th>
-                      <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>Actions</th>
+                      <th style={{ padding: '0.9rem 1rem' }}>Administrator</th>
+                      <th style={{ padding: '0.9rem 1rem' }}>Email Address</th>
+                      <th style={{ padding: '0.9rem 1rem' }}>Role Permission</th>
+                      <th style={{ padding: '0.9rem 1rem' }}>Status</th>
+                      <th style={{ padding: '0.9rem 1rem' }}>Last Login</th>
+                      <th style={{ padding: '0.9rem 1rem' }}>Date Created</th>
+                      <th style={{ padding: '0.9rem 1rem', textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {adminUsers.map((a) => (
-                      <tr key={a.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
-                        <td style={{ padding: '0.85rem 1rem', fontWeight: 600, color: '#fff' }}>{a.name}</td>
-                        <td style={{ padding: '0.85rem 1rem', color: '#94a3b8' }}>{a.email}</td>
-                        <td style={{ padding: '0.85rem 1rem' }}>
-                          <span className={`badge ${a.role === 'SUPER_ADMIN' ? 'badge-red' : a.role === 'ADMIN' ? 'badge-blue' : 'badge-green'}`}>
-                            {a.role}
-                          </span>
-                        </td>
-                        <td style={{ padding: '0.85rem 1rem' }}>{a.status}</td>
-                        <td style={{ padding: '0.85rem 1rem', color: '#94a3b8' }}>{a.last_login ? new Date(a.last_login).toLocaleDateString() : 'Never'}</td>
-                        <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
-                          {a.id !== admin.id && (
+                    {adminUsers
+                      .filter((a) => {
+                        if (adminRoleFilter !== 'All' && a.role !== adminRoleFilter) return false;
+                        if (adminSearch) {
+                          const q = adminSearch.toLowerCase();
+                          return (a.name && a.name.toLowerCase().includes(q)) || (a.email && a.email.toLowerCase().includes(q));
+                        }
+                        return true;
+                      })
+                      .map((a) => (
+                        <tr key={a.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
+                          <td style={{ padding: '0.85rem 1rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                              <div style={{
+                                width: '34px',
+                                height: '34px',
+                                borderRadius: '50%',
+                                background: a.role === 'SUPER_ADMIN' ? 'linear-gradient(135deg, #dc2626, #991b1b)' : 'linear-gradient(135deg, #1d4ed8, #2563eb)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#fff',
+                                fontWeight: 700,
+                                fontSize: '0.85rem',
+                                border: '1.5px solid rgba(255, 255, 255, 0.15)'
+                              }}>
+                                {a.name ? a.name.charAt(0).toUpperCase() : 'A'}
+                              </div>
+                              <div>
+                                <div style={{ fontWeight: 700, color: '#fff' }}>{a.name}</div>
+                                {a.id === admin.id && <span style={{ fontSize: '0.7rem', color: '#38bdf8' }}>(You)</span>}
+                              </div>
+                            </div>
+                          </td>
+                          <td style={{ padding: '0.85rem 1rem', color: '#94a3b8' }}>{a.email}</td>
+                          <td style={{ padding: '0.85rem 1rem' }}>
+                            <span className={`badge ${a.role === 'SUPER_ADMIN' ? 'badge-red' : a.role === 'ADMIN' ? 'badge-blue' : 'badge-green'}`}>
+                              {a.role}
+                            </span>
+                          </td>
+                          <td style={{ padding: '0.85rem 1rem' }}>
                             <button
-                              onClick={() => {
-                                if (window.confirm(`Delete ${a.name}?`)) {
-                                  api.deleteAdmin(a.id).then(loadAllAdminData);
+                              onClick={async () => {
+                                if (a.id === admin.id) {
+                                  alert('You cannot deactivate your own account.');
+                                  return;
+                                }
+                                const newStatus = a.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE';
+                                if (window.confirm(`Set status of ${a.name} to ${newStatus}?`)) {
+                                  await api.updateAdmin(a.id, { status: newStatus });
+                                  loadAllAdminData();
                                 }
                               }}
-                              style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer' }}
+                              style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}
+                              title="Click to toggle status"
                             >
-                              <Trash2 size={16} />
+                              <span className={`badge ${a.status === 'ACTIVE' ? 'badge-green' : 'badge-red'}`} style={{ cursor: 'pointer' }}>
+                                {a.status}
+                              </span>
                             </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td style={{ padding: '0.85rem 1rem', color: '#94a3b8', fontSize: '0.82rem' }}>
+                            {a.last_login ? new Date(a.last_login).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true }) : 'Never'}
+                          </td>
+                          <td style={{ padding: '0.85rem 1rem', color: '#64748b', fontSize: '0.82rem' }}>
+                            {a.created_at ? new Date(a.created_at).toLocaleDateString('en-IN') : '-'}
+                          </td>
+                          <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
+                            <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
+                              <button
+                                onClick={() => {
+                                  setEditAdminForm({
+                                    id: a.id,
+                                    name: a.name,
+                                    email: a.email,
+                                    role: a.role,
+                                    status: a.status,
+                                    password: ''
+                                  });
+                                  setEditAdminModalOpen(true);
+                                }}
+                                className="btn btn-outline btn-sm"
+                                style={{ padding: '0.35rem 0.6rem', fontSize: '0.78rem' }}
+                                title="Edit Admin & Reset Password"
+                              >
+                                <Edit3 size={14} /> Edit
+                              </button>
+                              {a.id !== admin.id && (
+                                <button
+                                  onClick={async () => {
+                                    if (window.confirm(`Are you sure you want to permanently delete admin account for ${a.name} (${a.email})?`)) {
+                                      try {
+                                        await api.deleteAdmin(a.id);
+                                        loadAllAdminData();
+                                      } catch (err) {
+                                        alert(err.message || 'Failed to delete admin');
+                                      }
+                                    }
+                                  }}
+                                  className="btn btn-outline btn-sm"
+                                  style={{ padding: '0.35rem 0.6rem', borderColor: 'rgba(239, 68, 68, 0.4)', color: '#f87171' }}
+                                  title="Delete Admin"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
               </div>
@@ -1746,10 +2220,303 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                   <option value="SUPER_ADMIN">Super Admin</option>
                 </select>
               </div>
-              <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '0.5rem' }}>
-                Create Administrator
-              </button>
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
+                <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
+                  Create Administrator
+                </button>
+                <button type="button" onClick={() => setAdminModalOpen(false)} className="btn btn-outline" style={{ flex: 1 }}>
+                  Cancel
+                </button>
+              </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Admin Modal */}
+      {editAdminModalOpen && (
+        <div className="modal-overlay" onClick={() => setEditAdminModalOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+            <h3 style={{ fontSize: '1.3rem', color: '#fff', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <ShieldCheck size={20} color="#38bdf8" /> Edit Administrator
+            </h3>
+            <p style={{ fontSize: '0.82rem', color: '#94a3b8', marginBottom: '1.25rem' }}>
+              Update permissions, account status, or reset credentials for {editAdminForm.email}.
+            </p>
+
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              try {
+                const payload = {
+                  name: editAdminForm.name,
+                  role: editAdminForm.role,
+                  status: editAdminForm.status
+                };
+                if (editAdminForm.password && editAdminForm.password.trim().length >= 6) {
+                  payload.password = editAdminForm.password.trim();
+                }
+                await api.updateAdmin(editAdminForm.id, payload);
+                setEditAdminModalOpen(false);
+                loadAllAdminData();
+              } catch (err) {
+                alert(err.message || 'Failed to update administrator');
+              }
+            }}>
+              <div className="form-group">
+                <label className="form-label">Full Name *</label>
+                <input
+                  type="text"
+                  required
+                  className="form-control"
+                  value={editAdminForm.name || ''}
+                  onChange={(e) => setEditAdminForm({ ...editAdminForm, name: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Email Address (Read-only)</label>
+                <input
+                  type="email"
+                  disabled
+                  className="form-control"
+                  value={editAdminForm.email || ''}
+                  style={{ opacity: 0.7, cursor: 'not-allowed' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div className="form-group">
+                  <label className="form-label">Role Level *</label>
+                  <select
+                    className="form-control"
+                    value={editAdminForm.role}
+                    onChange={(e) => setEditAdminForm({ ...editAdminForm, role: e.target.value })}
+                  >
+                    <option value="ADMIN">Admin</option>
+                    <option value="STAFF">Staff / Dispatcher</option>
+                    <option value="SUPER_ADMIN">Super Admin</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Account Status *</label>
+                  <select
+                    className="form-control"
+                    value={editAdminForm.status}
+                    onChange={(e) => setEditAdminForm({ ...editAdminForm, status: e.target.value })}
+                  >
+                    <option value="ACTIVE">ACTIVE (Enabled)</option>
+                    <option value="DISABLED">DISABLED (Suspended)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">
+                  Reset Password <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>(Leave blank to keep current)</span>
+                </label>
+                <input
+                  type="password"
+                  placeholder="Enter 6+ chars to reset password"
+                  className="form-control"
+                  value={editAdminForm.password || ''}
+                  onChange={(e) => setEditAdminForm({ ...editAdminForm, password: e.target.value })}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
+                <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
+                  Save Changes
+                </button>
+                <button type="button" onClick={() => setEditAdminModalOpen(false)} className="btn btn-outline" style={{ flex: 1 }}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Customer Activity & Session History Modal */}
+      {customerModalOpen && (
+        <div className="modal-overlay" onClick={() => setCustomerModalOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '750px', maxHeight: '90vh', overflowY: 'auto' }}>
+            {customerModalLoading || !selectedCustomerDetail ? (
+              <div style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
+                <RefreshCw size={24} className="animate-spin-slow" style={{ margin: '0 auto 1rem auto' }} />
+                Loading customer activity & session logs...
+              </div>
+            ) : (
+              <div>
+                {/* Header */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '1rem', marginBottom: '1.25rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <div style={{
+                      width: '46px',
+                      height: '46px',
+                      borderRadius: '50%',
+                      background: 'linear-gradient(135deg, #1d4ed8, #2563eb)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '1.2rem',
+                      fontWeight: 800,
+                      color: '#fff'
+                    }}>
+                      {selectedCustomerDetail.customer.name ? selectedCustomerDetail.customer.name.charAt(0).toUpperCase() : 'C'}
+                    </div>
+                    <div>
+                      <h3 style={{ fontSize: '1.25rem', color: '#fff', marginBottom: '0.2rem' }}>
+                        {selectedCustomerDetail.customer.name}
+                      </h3>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>{selectedCustomerDetail.customer.email}</span>
+                        <span className={`badge ${selectedCustomerDetail.customer.status === 'ACTIVE' ? 'badge-green' : 'badge-red'}`}>
+                          {selectedCustomerDetail.customer.status}
+                        </span>
+                        {selectedCustomerDetail.customer.is_google_user ? (
+                          <span className="badge badge-orange">Google Account</span>
+                        ) : (
+                          <span className="badge badge-blue">Email Verified</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => setCustomerModalOpen(false)}
+                    className="btn btn-outline btn-sm"
+                    style={{ padding: '0.4rem 0.7rem' }}
+                  >
+                    Close
+                  </button>
+                </div>
+
+                {/* Profile Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.85rem', marginBottom: '1.5rem' }}>
+                  <div className="glass-card" style={{ padding: '0.9rem', borderRadius: '10px' }}>
+                    <div style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase' }}>Phone Contact</div>
+                    <div style={{ fontWeight: 700, color: '#34d399', fontSize: '0.92rem', marginTop: '0.2rem' }}>
+                      {selectedCustomerDetail.customer.mobile ? `+91 ${selectedCustomerDetail.customer.mobile}` : 'Not provided'}
+                    </div>
+                  </div>
+
+                  <div className="glass-card" style={{ padding: '0.9rem', borderRadius: '10px' }}>
+                    <div style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase' }}>Total Site Logins</div>
+                    <div style={{ fontWeight: 800, color: '#38bdf8', fontSize: '1.1rem', marginTop: '0.2rem' }}>
+                      {selectedCustomerDetail.customer.login_count || 1} Times
+                    </div>
+                  </div>
+
+                  <div className="glass-card" style={{ padding: '0.9rem', borderRadius: '10px' }}>
+                    <div style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase' }}>First Login / Registered</div>
+                    <div style={{ fontWeight: 600, color: '#cbd5e1', fontSize: '0.82rem', marginTop: '0.2rem' }}>
+                      {selectedCustomerDetail.customer.first_login ? new Date(selectedCustomerDetail.customer.first_login).toLocaleDateString('en-IN') : 'N/A'}
+                    </div>
+                  </div>
+
+                  <div className="glass-card" style={{ padding: '0.9rem', borderRadius: '10px' }}>
+                    <div style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase' }}>Last Logged In</div>
+                    <div style={{ fontWeight: 600, color: '#cbd5e1', fontSize: '0.82rem', marginTop: '0.2rem' }}>
+                      {selectedCustomerDetail.customer.last_login ? new Date(selectedCustomerDetail.customer.last_login).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true }) : 'N/A'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Delivery Address */}
+                {selectedCustomerDetail.customer.address && (
+                  <div className="glass-card" style={{ padding: '1rem', borderRadius: '10px', marginBottom: '1.5rem' }}>
+                    <div style={{ fontSize: '0.74rem', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Site / Delivery Address</div>
+                    <div style={{ color: '#f1f5f9', fontSize: '0.88rem' }}>{selectedCustomerDetail.customer.address}</div>
+                  </div>
+                )}
+
+                {/* Login Session History Table */}
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <h4 style={{ fontSize: '0.95rem', color: '#fff', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <Clock size={16} color="#38bdf8" /> Logged In Session History (Recent Logins)
+                  </h4>
+
+                  <div className="glass-card" style={{ borderRadius: '10px', overflow: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                      <thead>
+                        <tr style={{ background: 'rgba(255, 255, 255, 0.04)', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                          <th style={{ padding: '0.65rem 0.85rem' }}>Login Time</th>
+                          <th style={{ padding: '0.65rem 0.85rem' }}>IP Address</th>
+                          <th style={{ padding: '0.65rem 0.85rem' }}>Device / Browser</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedCustomerDetail.loginHistory && selectedCustomerDetail.loginHistory.length > 0 ? (
+                          selectedCustomerDetail.loginHistory.map((sess, idx) => (
+                            <tr key={idx} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.03)' }}>
+                              <td style={{ padding: '0.65rem 0.85rem', color: '#fff', fontWeight: 600 }}>
+                                {sess.login_time ? new Date(sess.login_time).toLocaleString('en-IN') : 'Recent'}
+                              </td>
+                              <td style={{ padding: '0.65rem 0.85rem', color: '#94a3b8' }}>
+                                {sess.ip_address || '127.0.0.1'}
+                              </td>
+                              <td style={{ padding: '0.65rem 0.85rem', color: '#cbd5e1', maxWidth: '300px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {sess.user_agent || 'Web Browser'}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan="3" style={{ padding: '1rem', textAlign: 'center', color: '#94a3b8' }}>
+                              User logged in {selectedCustomerDetail.customer.login_count || 1} time(s). Last active: {selectedCustomerDetail.customer.last_login ? new Date(selectedCustomerDetail.customer.last_login).toLocaleString('en-IN') : 'N/A'}
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Orders & Quotes Summary */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div className="glass-card" style={{ padding: '1rem', borderRadius: '10px' }}>
+                    <div style={{ fontWeight: 700, color: '#fff', fontSize: '0.88rem', marginBottom: '0.5rem' }}>
+                      Orders Placed ({selectedCustomerDetail.orders?.length || 0})
+                    </div>
+                    {selectedCustomerDetail.orders?.length > 0 ? (
+                      <div style={{ fontSize: '0.78rem', color: '#cbd5e1' }}>
+                        Latest Order: #{selectedCustomerDetail.orders[0].order_number} (₹{selectedCustomerDetail.orders[0].final_amount})
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '0.78rem', color: '#64748b' }}>No orders yet</div>
+                    )}
+                  </div>
+
+                  <div className="glass-card" style={{ padding: '1rem', borderRadius: '10px' }}>
+                    <div style={{ fontWeight: 700, color: '#fff', fontSize: '0.88rem', marginBottom: '0.5rem' }}>
+                      Quotation Inquiries ({selectedCustomerDetail.quotes?.length || 0})
+                    </div>
+                    {selectedCustomerDetail.quotes?.length > 0 ? (
+                      <div style={{ fontSize: '0.78rem', color: '#cbd5e1' }}>
+                        Latest: {selectedCustomerDetail.quotes[0].material_name} ({selectedCustomerDetail.quotes[0].quantity} {selectedCustomerDetail.quotes[0].unit})
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '0.78rem', color: '#64748b' }}>No quotes requested yet</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Action CTA */}
+                <div style={{ marginTop: '1.5rem', display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={() => {
+                      handleSelectCustomerForBilling(selectedCustomerDetail.customer.id);
+                      setCustomerModalOpen(false);
+                      setActiveSection('invoices');
+                    }}
+                    className="btn btn-primary btn-sm"
+                  >
+                    Create Bill For This Customer
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

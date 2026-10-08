@@ -10,6 +10,7 @@ import {
   LogOut,
   ChevronDown
 } from 'lucide-react';
+import BrandLogo from './BrandLogo';
 
 export default function Navbar({ 
   settings, 
@@ -26,9 +27,13 @@ export default function Navbar({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
 
+  const [activeNav, setActiveNav] = useState('home');
+
   useEffect(() => {
     let ticking = false;
     let lastState = false;
+    const sectionIds = ['home', 'about', 'materials', 'services', 'vehicles', 'reviews', 'contact'];
+
     const handleScroll = () => {
       if (!ticking) {
         window.requestAnimationFrame(() => {
@@ -37,6 +42,17 @@ export default function Navbar({
             lastState = current;
             setIsScrolled(current);
           }
+
+          // Active scroll spy
+          const scrollPos = window.scrollY + 160;
+          for (let i = sectionIds.length - 1; i >= 0; i--) {
+            const el = document.getElementById(sectionIds[i]);
+            if (el && el.offsetTop <= scrollPos) {
+              setActiveNav(sectionIds[i]);
+              break;
+            }
+          }
+
           ticking = false;
         });
         ticking = true;
@@ -55,6 +71,27 @@ export default function Navbar({
     { name: 'Reviews', href: '#reviews' },
     { name: 'Contact', href: '#contact' },
   ];
+
+  const handleNavClick = (e, href) => {
+    e.preventDefault();
+    setMobileMenuOpen(false);
+    const targetId = href.replace('#', '');
+    const element = document.getElementById(targetId);
+    if (element) {
+      const navOffset = 78;
+      const elementPos = element.getBoundingClientRect().top;
+      const offsetPos = elementPos + window.pageYOffset - navOffset;
+      window.scrollTo({
+        top: offsetPos,
+        behavior: 'smooth'
+      });
+      try {
+        window.history.pushState(null, '', href);
+      } catch (err) {}
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   const primaryPhone = settings.phone_primary || '9944076675';
 
@@ -78,37 +115,35 @@ export default function Navbar({
         {/* Brand Logo */}
         <a 
           href="#home" 
+          onClick={(e) => handleNavClick(e, '#home')}
           style={{ 
             display: 'flex', 
             alignItems: 'center', 
             gap: '0.75rem', 
             textDecoration: 'none', 
-            color: '#fff' 
+            color: '#fff',
+            cursor: 'pointer'
           }}
         >
-          <div style={{
-            width: '42px',
-            height: '42px',
-            borderRadius: '10px',
-            background: 'linear-gradient(135deg, #2563eb 0%, #f97316 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 4px 12px rgba(37, 99, 235, 0.4)'
-          }}>
-            <Truck size={24} color="#ffffff" />
-          </div>
+          <BrandLogo 
+            size={46}
+            showRing={true}
+            showAura={true}
+            showShine={true}
+            showSparkles={true}
+            showFloat={false}
+          />
           <div>
             <div style={{ 
               fontWeight: 800, 
-              fontSize: '1.25rem', 
+              fontSize: '1.2rem', 
               letterSpacing: '-0.02em', 
-              lineHeight: 1.1 
+              lineHeight: 1.15 
             }}>
               Sri Angalamman
             </div>
             <div style={{ 
-              fontSize: '0.75rem', 
+              fontSize: '0.72rem', 
               color: '#f97316', 
               fontWeight: 700, 
               letterSpacing: '0.08em', 
@@ -121,25 +156,47 @@ export default function Navbar({
 
         {/* Desktop Navigation */}
         <nav style={{ display: 'none', alignItems: 'center', gap: '1.25rem', margin: '0 1.5rem' }} className="desktop-nav">
-          {navLinks.map((link) => (
-            <a
-              key={link.name}
-              href={link.href}
-              style={{
-                color: '#cbd5e1',
-                textDecoration: 'none',
-                fontSize: '0.92rem',
-                fontWeight: 500,
-                transition: 'color 0.2s',
-                position: 'relative',
-                whiteSpace: 'nowrap'
-              }}
-              onMouseEnter={(e) => (e.target.style.color = '#38bdf8')}
-              onMouseLeave={(e) => (e.target.style.color = '#cbd5e1')}
-            >
-              {link.name}
-            </a>
-          ))}
+          {navLinks.map((link) => {
+            const isActive = activeNav === link.href.replace('#', '');
+            return (
+              <a
+                key={link.name}
+                href={link.href}
+                onClick={(e) => handleNavClick(e, link.href)}
+                style={{
+                  color: isActive ? '#38bdf8' : '#cbd5e1',
+                  textDecoration: 'none',
+                  fontSize: '0.92rem',
+                  fontWeight: isActive ? 700 : 500,
+                  transition: 'color 0.2s, transform 0.2s',
+                  position: 'relative',
+                  whiteSpace: 'nowrap',
+                  padding: '0.25rem 0',
+                  cursor: 'pointer'
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) e.target.style.color = '#38bdf8';
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) e.target.style.color = '#cbd5e1';
+                }}
+              >
+                {link.name}
+                {isActive && (
+                  <span style={{
+                    position: 'absolute',
+                    bottom: '-4px',
+                    left: 0,
+                    right: 0,
+                    height: '2px',
+                    borderRadius: '2px',
+                    background: 'linear-gradient(90deg, #38bdf8, #2563eb)',
+                    boxShadow: '0 0 8px #38bdf8'
+                  }} />
+                )}
+              </a>
+            );
+          })}
         </nav>
 
         {/* Right Action Buttons */}
@@ -365,17 +422,23 @@ export default function Navbar({
             <a
               key={link.name}
               href={link.href}
-              onClick={() => setMobileMenuOpen(false)}
+              onClick={(e) => handleNavClick(e, link.href)}
               style={{
-                color: '#e2e8f0',
+                color: activeNav === link.href.replace('#', '') ? '#38bdf8' : '#e2e8f0',
                 textDecoration: 'none',
                 fontSize: '1.05rem',
-                fontWeight: 500,
+                fontWeight: activeNav === link.href.replace('#', '') ? 700 : 500,
                 padding: '0.5rem 0',
-                borderBottom: '1px solid rgba(255, 255, 255, 0.05)'
+                borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
               }}
             >
-              {link.name}
+              <span>{link.name}</span>
+              {activeNav === link.href.replace('#', '') && (
+                <span style={{ fontSize: '0.7rem', color: '#38bdf8', fontWeight: 700 }}>● Active</span>
+              )}
             </a>
           ))}
 

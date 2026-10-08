@@ -13,10 +13,6 @@ export default defineConfig({
       '/uploads': {
         target: 'http://localhost:5000',
         changeOrigin: true,
-      },
-      '/images': {
-        target: 'http://localhost:5000',
-        changeOrigin: true,
       }
     }
   },

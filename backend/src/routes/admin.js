@@ -78,35 +78,55 @@ router.get('/dashboard', requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF']), (req, r
   }
 });
 
-// Customer Management: List all customers
+// Customer Management: List all customers with login details and activity
 router.get('/users', requireRole(['SUPER_ADMIN', 'ADMIN']), (req, res) => {
   try {
-    const { search, status } = req.query;
-    let query = 'SELECT id, name, email, mobile, profile_image, role, login_count, first_login, last_login, created_at, status FROM users WHERE 1=1';
+    const { search, status, logged_in } = req.query;
+    let query = `
+      SELECT 
+        u.id, u.name, u.email, u.mobile, u.profile_image, u.role, 
+        u.login_count, u.first_login, u.last_login, u.created_at, u.status, u.address,
+        CASE WHEN u.google_id IS NOT NULL THEN 1 ELSE 0 END as is_google_user,
+        (SELECT COUNT(*) FROM orders o WHERE o.user_id = u.id) as total_orders,
+        (SELECT COUNT(*) FROM quote_requests q WHERE q.user_id = u.id) as total_quotes,
+        (SELECT COUNT(*) FROM delivery_requests d WHERE d.user_id = u.id) as total_deliveries
+      FROM users u
+      WHERE 1=1
+    `;
     const params = [];
 
     if (status && status !== 'All') {
-      query += ' AND status = ?';
+      query += ' AND u.status = ?';
       params.push(status);
     }
+    if (logged_in === 'true') {
+      query += ' AND (u.login_count > 0 OR u.last_login IS NOT NULL)';
+    }
     if (search) {
-      query += ' AND (name LIKE ? OR email LIKE ? OR mobile LIKE ?)';
+      query += ' AND (u.name LIKE ? OR u.email LIKE ? OR u.mobile LIKE ?)';
       params.push(`%${search}%`, `%${search}%`, `%${search}%`);
     }
 
-    query += ' ORDER BY created_at DESC';
+    query += ' ORDER BY u.last_login DESC, u.created_at DESC';
     const customers = db.prepare(query).all(...params);
     res.json(customers);
   } catch (err) {
+    console.error('Fetch customers error:', err);
     res.status(500).json({ error: 'Failed to fetch customer list' });
   }
 });
 
-// Customer Management: Get single customer details with orders & invoices
+// Customer Management: Get single customer details with orders, quotes & login history
 router.get('/users/:id', requireRole(['SUPER_ADMIN', 'ADMIN']), (req, res) => {
   try {
     const { id } = req.params;
-    const customer = db.prepare('SELECT id, name, email, mobile, profile_image, address, role, login_count, first_login, last_login, created_at, status FROM users WHERE id = ?').get(id);
+    const customer = db.prepare(`
+      SELECT 
+        id, name, email, mobile, profile_image, address, role, 
+        login_count, first_login, last_login, created_at, status,
+        CASE WHEN google_id IS NOT NULL THEN 1 ELSE 0 END as is_google_user
+      FROM users WHERE id = ?
+    `).get(id);
     if (!customer) {
       return res.status(404).json({ error: 'Customer not found' });
     }
@@ -114,14 +134,17 @@ router.get('/users/:id', requireRole(['SUPER_ADMIN', 'ADMIN']), (req, res) => {
     const orders = db.prepare('SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC').all(id);
     const invoices = db.prepare('SELECT * FROM invoices WHERE user_id = ? ORDER BY created_at DESC').all(id);
     const quotes = db.prepare('SELECT * FROM quote_requests WHERE user_id = ? ORDER BY created_at DESC').all(id);
+    const loginHistory = db.prepare('SELECT * FROM login_history WHERE user_id = ? ORDER BY login_time DESC LIMIT 20').all(id);
 
     res.json({
       customer,
       orders,
       invoices,
-      quotes
+      quotes,
+      loginHistory
     });
   } catch (err) {
+    console.error('Customer details error:', err);
     res.status(500).json({ error: 'Failed to retrieve customer history' });
   }
 });
@@ -144,18 +167,19 @@ router.put('/users/:id/status', requireRole(['SUPER_ADMIN', 'ADMIN']), (req, res
   }
 });
 
-// Admin Users Management (SUPER_ADMIN only)
-router.get('/admins', requireRole(['SUPER_ADMIN']), (req, res) => {
+// Admin Users Management (Accessible to SUPER_ADMIN & ADMIN)
+router.get('/admins', requireRole(['SUPER_ADMIN', 'ADMIN']), (req, res) => {
   try {
-    const admins = db.prepare('SELECT id, name, email, role, status, last_login, created_at FROM admins ORDER BY id ASC').all();
+    const admins = db.prepare('SELECT id, name, email, role, status, last_login, created_at, profile_image FROM admins ORDER BY id ASC').all();
     res.json(admins);
   } catch (err) {
+    console.error('Load admins error:', err);
     res.status(500).json({ error: 'Failed to load administrators' });
   }
 });
 
 // Add New Admin
-router.post('/admins', requireRole(['SUPER_ADMIN']), (req, res) => {
+router.post('/admins', requireRole(['SUPER_ADMIN', 'ADMIN']), (req, res) => {
   try {
     const { name, email, password, role } = req.body;
     if (!name || !email || !password) {
@@ -181,12 +205,13 @@ router.post('/admins', requireRole(['SUPER_ADMIN']), (req, res) => {
 
     res.status(201).json(created);
   } catch (err) {
+    console.error('Create admin error:', err);
     res.status(500).json({ error: 'Failed to create administrator' });
   }
 });
 
-// Edit Admin / Change Role / Reset Password
-router.put('/admins/:id', requireRole(['SUPER_ADMIN']), (req, res) => {
+// Edit Admin / Change Role / Reset Password / Status
+router.put('/admins/:id', requireRole(['SUPER_ADMIN', 'ADMIN']), (req, res) => {
   try {
     const { name, role, status, password } = req.body;
     const { id } = req.params;
@@ -215,21 +240,32 @@ router.put('/admins/:id', requireRole(['SUPER_ADMIN']), (req, res) => {
     const updated = db.prepare('SELECT id, name, email, role, status FROM admins WHERE id = ?').get(id);
     res.json(updated);
   } catch (err) {
+    console.error('Update admin error:', err);
     res.status(500).json({ error: 'Failed to update administrator' });
   }
 });
 
 // Delete Admin
-router.delete('/admins/:id', requireRole(['SUPER_ADMIN']), (req, res) => {
+router.delete('/admins/:id', requireRole(['SUPER_ADMIN', 'ADMIN']), (req, res) => {
   try {
     const { id } = req.params;
     if (parseInt(id) === req.user.id) {
       return res.status(400).json({ error: 'You cannot delete your own account' });
     }
 
+    const targetAdmin = db.prepare('SELECT role FROM admins WHERE id = ?').get(id);
+    if (!targetAdmin) {
+      return res.status(404).json({ error: 'Admin not found' });
+    }
+
+    if (targetAdmin.role === 'SUPER_ADMIN' && req.user.role !== 'SUPER_ADMIN') {
+      return res.status(403).json({ error: 'Only a Super Admin can remove another Super Admin' });
+    }
+
     db.prepare('DELETE FROM admins WHERE id = ?').run(id);
     res.json({ message: 'Administrator removed successfully' });
   } catch (err) {
+    console.error('Delete admin error:', err);
     res.status(500).json({ error: 'Failed to delete admin' });
   }
 });

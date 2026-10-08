@@ -1,5 +1,6 @@
 import React from 'react';
 import { Truck, Phone, MapPin, Mail, ArrowUp } from 'lucide-react';
+import BrandLogo from './BrandLogo';
 
 export default function Footer({ settings, onOpenAuth, onOpenAdminAuth }) {
   const primaryPhone = settings.phone_primary || '9944076675';
@@ -8,6 +9,20 @@ export default function Footer({ settings, onOpenAuth, onOpenAdminAuth }) {
 
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleScrollTo = (e, href) => {
+    e.preventDefault();
+    const targetId = href.replace('#', '');
+    const el = document.getElementById(targetId);
+    if (el) {
+      const navHeight = 78;
+      const pos = el.getBoundingClientRect().top + window.pageYOffset - navHeight;
+      window.scrollTo({ top: pos, behavior: 'smooth' });
+      try { window.history.pushState(null, '', href); } catch (err) {}
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   return (
@@ -30,23 +45,22 @@ export default function Footer({ settings, onOpenAuth, onOpenAdminAuth }) {
           
           {/* Column 1: Brand Info */}
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-              <div style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '10px',
-                background: 'linear-gradient(135deg, #2563eb 0%, #f97316 100%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <Truck size={22} color="#ffffff" />
-              </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', marginBottom: '1.15rem' }}>
+              <BrandLogo 
+                size={54} 
+                showRing={true} 
+                showAura={true} 
+                showShine={true} 
+                showSparkles={true} 
+              />
               <div>
-                <div style={{ fontWeight: 800, fontSize: '1.2rem', color: '#fff' }}>
+                <div style={{ fontSize: '0.72rem', color: '#fbbf24', fontWeight: 800, letterSpacing: '0.04em', lineHeight: 1.2 }}>
+                  ஸ்ரீ அங்காளம்மன் ப்ளூ மெட்டல்ஸ்
+                </div>
+                <div style={{ fontWeight: 800, fontSize: '1.25rem', color: '#fff', letterSpacing: '-0.01em', lineHeight: 1.2 }}>
                   Sri Angalamman
                 </div>
-                <div style={{ fontSize: '0.75rem', color: '#f97316', fontWeight: 700, letterSpacing: '0.05em' }}>
+                <div style={{ fontSize: '0.75rem', color: '#f97316', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                   BLUE METALS • PUDUCHERRY
                 </div>
               </div>
@@ -79,7 +93,8 @@ export default function Footer({ settings, onOpenAuth, onOpenAdminAuth }) {
                 <li key={l.name}>
                   <a
                     href={l.href}
-                    style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.88rem', transition: 'color 0.2s' }}
+                    onClick={(e) => handleScrollTo(e, l.href)}
+                    style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.88rem', transition: 'color 0.2s', cursor: 'pointer' }}
                     onMouseEnter={(e) => (e.target.style.color = '#38bdf8')}
                     onMouseLeave={(e) => (e.target.style.color = '#94a3b8')}
                   >

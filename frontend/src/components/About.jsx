@@ -9,6 +9,7 @@ import {
   HeartHandshake 
 } from 'lucide-react';
 import AnimatedSection from './AnimatedSection';
+import BrandLogo from './BrandLogo';
 
 export default function About({ settings, onOpenDelivery }) {
   const highlights = [
@@ -85,6 +86,13 @@ export default function About({ settings, onOpenDelivery }) {
               <img 
                 src={settings.about_image || '/images/about.jpg'} 
                 alt="Sri Angalamman Transport Fleet" 
+                loading="lazy"
+                onError={(e) => {
+                  if (!e.target.dataset.fallback) {
+                    e.target.dataset.fallback = '1';
+                    e.target.src = '/images/about.jpg';
+                  }
+                }}
                 style={{
                   width: '100%',
                   height: '420px',
@@ -98,6 +106,35 @@ export default function About({ settings, onOpenDelivery }) {
                 inset: 0,
                 background: 'linear-gradient(to top, rgba(5, 11, 24, 0.9) 0%, transparent 60%)'
               }} />
+
+              {/* Official Seal Badge */}
+              <div 
+                style={{
+                  position: 'absolute',
+                  top: '1.25rem',
+                  left: '1.25rem',
+                  background: 'rgba(7, 14, 28, 0.88)',
+                  backdropFilter: 'blur(12px)',
+                  border: '1px solid rgba(245, 158, 11, 0.5)',
+                  borderRadius: '9999px',
+                  padding: '0.35rem 0.9rem 0.35rem 0.45rem',
+                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.65)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.55rem',
+                  zIndex: 5
+                }}
+              >
+                <BrandLogo size={32} showRing={true} showAura={true} showShine={true} />
+                <div>
+                  <div style={{ fontSize: '0.62rem', color: '#fbbf24', fontWeight: 800, letterSpacing: '0.04em', lineHeight: 1 }}>
+                    ஸ்ரீ அங்காளம்மன்
+                  </div>
+                  <div style={{ fontSize: '0.74rem', color: '#ffffff', fontWeight: 800, letterSpacing: '0.02em', lineHeight: 1.2 }}>
+                    Verified Quarry Supply
+                  </div>
+                </div>
+              </div>
 
               <div style={{
                 position: 'absolute',

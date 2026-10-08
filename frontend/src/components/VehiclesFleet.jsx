@@ -172,11 +172,18 @@ export default function VehiclesFleet({ settings, onOpenDelivery, onOpenQuote })
                 border: '1px solid rgba(255, 255, 255, 0.08)'
               }}
             >
-              <div className="card-img-zoom" style={{ height: '210px', overflow: 'hidden', position: 'relative' }}>
+              <div className="card-img-zoom" style={{ height: '210px', overflow: 'hidden', position: 'relative', background: '#091224' }}>
                 <img 
                   src={v.image} 
                   alt={v.name}
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  loading="lazy"
+                  onError={(e) => {
+                    if (!e.target.dataset.fallback) {
+                      e.target.dataset.fallback = '1';
+                      e.target.src = '/images/fleet.jpg';
+                    }
+                  }}
                 />
                 <div style={{
                   position: 'absolute',

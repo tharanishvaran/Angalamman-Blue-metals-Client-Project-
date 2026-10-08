@@ -139,7 +139,7 @@ export default function MaterialsCatalog({
               }}
             >
               {/* Image Container with Zoom Effect */}
-              <div className="card-img-zoom" style={{ position: 'relative', height: '195px', overflow: 'hidden' }}>
+              <div className="card-img-zoom" style={{ position: 'relative', height: '195px', overflow: 'hidden', background: '#091224' }}>
                 <img 
                   src={material.image_url || '/images/hero.jpg'} 
                   alt={material.name}
@@ -149,6 +149,12 @@ export default function MaterialsCatalog({
                     objectFit: 'cover'
                   }}
                   loading="lazy"
+                  onError={(e) => {
+                    if (!e.target.dataset.fallback) {
+                      e.target.dataset.fallback = '1';
+                      e.target.src = '/images/hero.jpg';
+                    }
+                  }}
                 />
                 
                 {/* Availability Badge */}

@@ -116,19 +116,26 @@ export default function InvoiceViewModal({ invoice, business = {}, onClose }) {
         <div className="printable-invoice" style={{ padding: '0.5rem' }}>
           
           {/* Header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
-            <div>
-              <h2 style={{ fontSize: '1.6rem', color: '#1e3a8a', fontWeight: 800, margin: 0 }}>
-                {business.business_name || 'Sri Angalamman Blue Metals'}
-              </h2>
-              <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.2rem' }}>
-                Blue Metals, Sand & Construction Material Logistics
-              </div>
-              <div style={{ fontSize: '0.82rem', color: '#475569', marginTop: '0.2rem', maxWidth: '350px' }}>
-                {business.address || 'Kalathumettu Veedhi, Sathiyamoorthy Nagar, Thilaspettai, Puducherry'}
-              </div>
-              <div style={{ fontSize: '0.82rem', color: '#475569', marginTop: '0.2rem' }}>
-                Hotline: {business.phone_primary || '9944076675'} / {business.phone_secondary || '9345009337'}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', gap: '1rem', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <img 
+                src="/logo.png" 
+                alt="Sri Angalamman Blue Metals" 
+                style={{ width: '64px', height: '64px', borderRadius: '50%', border: '2px solid #cbd5e1', objectFit: 'cover', flexShrink: 0 }} 
+              />
+              <div>
+                <h2 style={{ fontSize: '1.5rem', color: '#1e3a8a', fontWeight: 800, margin: 0 }}>
+                  {business.business_name || 'Sri Angalamman Blue Metals'}
+                </h2>
+                <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.2rem' }}>
+                  Blue Metals, Sand & Construction Material Logistics
+                </div>
+                <div style={{ fontSize: '0.82rem', color: '#475569', marginTop: '0.2rem', maxWidth: '350px' }}>
+                  {business.address || 'Kalathumettu Veedhi, Sathiyamoorthy Nagar, Thilaspettai, Puducherry'}
+                </div>
+                <div style={{ fontSize: '0.82rem', color: '#475569', marginTop: '0.2rem' }}>
+                  Hotline: {business.phone_primary || '9944076675'} / {business.phone_secondary || '9345009337'}
+                </div>
               </div>
             </div>
 

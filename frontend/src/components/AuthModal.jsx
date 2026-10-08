@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { User, Phone, X, CheckCircle2, Lock, Mail, Eye, EyeOff, Sparkles, UserPlus, LogIn } from 'lucide-react';
 import { GoogleLogin } from '@react-oauth/google';
+import BrandLogo from './BrandLogo';
 import { api } from '../api';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '547111778244-o780h96i0cvr63k5ubhuasmk53k13a40.apps.googleusercontent.com';
@@ -248,18 +249,8 @@ export default function AuthModal({
             )}
 
             <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-              <div style={{
-                width: '48px',
-                height: '48px',
-                borderRadius: '14px',
-                background: 'rgba(37, 99, 235, 0.2)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                margin: '0 auto 0.85rem auto',
-                color: '#38bdf8'
-              }}>
-                <User size={24} />
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.85rem' }}>
+                <BrandLogo size={58} showRing={true} showAura={true} showShine={true} showSparkles={true} />
               </div>
               <h3 style={{ fontSize: '1.45rem', color: '#fff', fontWeight: 700 }}>
                 {tab === 'signin' ? 'Welcome Back' : 'Create Customer Account'}

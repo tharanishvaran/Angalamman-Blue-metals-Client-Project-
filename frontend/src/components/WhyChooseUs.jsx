@@ -44,7 +44,7 @@ export default function WhyChooseUs() {
   ];
 
   return (
-    <section className="section-padding" style={{ background: 'rgba(7, 14, 27, 0.75)', position: 'relative' }}>
+    <section id="why-choose-us" className="section-padding" style={{ background: 'rgba(7, 14, 27, 0.75)', position: 'relative' }}>
       <div className="container">
         
         {/* Header */}

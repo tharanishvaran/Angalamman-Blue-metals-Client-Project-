@@ -11,6 +11,8 @@ import {
   MapPin,
   ExternalLink
 } from 'lucide-react';
+import BrandLogo from './BrandLogo';
+import AnimatedSection from './AnimatedSection';
 
 export default function Hero({ settings, onOpenQuote, onOpenDelivery }) {
   const primaryPhone = settings.phone_primary || '9944076675';
@@ -63,7 +65,7 @@ export default function Hero({ settings, onOpenQuote, onOpenDelivery }) {
         }}>
           
           {/* Left Text Column */}
-          <div>
+          <AnimatedSection animation="fade-up">
             
             {/* Tags / Badges */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center', marginBottom: '1.35rem' }}>
@@ -209,11 +211,10 @@ export default function Hero({ settings, onOpenQuote, onOpenDelivery }) {
                 </div>
               </div>
             </div>
-
-          </div>
+          </AnimatedSection>
 
           {/* Right Visual Showcase Card */}
-          <div style={{ position: 'relative' }}>
+          <AnimatedSection animation="fade-up" delay="0.12s" style={{ position: 'relative' }}>
             
             {/* Visual Frame */}
             <div 
@@ -230,6 +231,14 @@ export default function Hero({ settings, onOpenQuote, onOpenDelivery }) {
               <img 
                 src={settings.hero_image || '/images/hero.jpg'} 
                 alt="Sri Angalamman Blue Metals Quarry Depot and Vehicles" 
+                loading="eager"
+                fetchPriority="high"
+                onError={(e) => {
+                  if (!e.target.dataset.fallback) {
+                    e.target.dataset.fallback = '1';
+                    e.target.src = '/images/hero.jpg';
+                  }
+                }}
                 style={{
                   width: '100%',
                   height: '420px',
@@ -294,6 +303,42 @@ export default function Hero({ settings, onOpenQuote, onOpenDelivery }) {
               </div>
             </div>
 
+            {/* Official Animated Brand Seal Medallion */}
+            <div 
+              className="animate-float"
+              style={{
+                position: 'absolute',
+                top: '-24px',
+                left: '-14px',
+                background: 'rgba(7, 14, 28, 0.94)',
+                backdropFilter: 'blur(16px)',
+                border: '1.5px solid rgba(245, 158, 11, 0.55)',
+                borderRadius: '9999px',
+                padding: '0.4rem 1rem 0.4rem 0.5rem',
+                boxShadow: '0 14px 36px rgba(0, 0, 0, 0.75), 0 0 24px rgba(245, 158, 11, 0.25)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.65rem',
+                zIndex: 22
+              }}
+            >
+              <BrandLogo 
+                size={44} 
+                showRing={true} 
+                showAura={true} 
+                showShine={true} 
+                showSparkles={true} 
+              />
+              <div>
+                <div style={{ fontSize: '0.68rem', color: '#fbbf24', fontWeight: 800, letterSpacing: '0.04em', lineHeight: 1.1 }}>
+                  ஸ்ரீ அங்காளம்மன் துணை
+                </div>
+                <div style={{ fontSize: '0.78rem', color: '#ffffff', fontWeight: 800, letterSpacing: '0.02em', lineHeight: 1.2 }}>
+                  Certified Depot Seal
+                </div>
+              </div>
+            </div>
+
             {/* Floating Top Badge with Radar Dot */}
             <div 
               style={{
@@ -317,12 +362,12 @@ export default function Hero({ settings, onOpenQuote, onOpenDelivery }) {
               </span>
             </div>
 
-          </div>
+          </AnimatedSection>
 
         </div>
 
-        {/* Clean Static Feature Highlight Bar (Replaces laggy sliding ticker) */}
-        <div style={{ marginTop: '3.5rem' }}>
+        {/* Clean Static Feature Highlight Bar with smooth animation */}
+        <AnimatedSection animation="fade-up" delay="0.18s" style={{ marginTop: '3.5rem' }}>
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
@@ -365,7 +410,7 @@ export default function Hero({ settings, onOpenQuote, onOpenDelivery }) {
               </div>
             </div>
           </div>
-        </div>
+        </AnimatedSection>
 
       </div>
     </section>

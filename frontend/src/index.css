@@ -173,27 +173,55 @@ button {
 }
 
 /* ─── Scroll Animation Classes ───────────────────── */
-/* Clean, subtle vertical reveals that do not interfere with vertical scrolling */
-.anim-fade-up,
-.anim-slide-left,
-.anim-slide-right,
-.anim-scale-in {
+/* Ultra-smooth GPU-accelerated reveals with spring-like easing curves */
+.anim-fade-up {
   opacity: 0;
-  transform: translateY(16px);
-  transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  transform: translate3d(0, 24px, 0);
+  transition: opacity 0.55s cubic-bezier(0.16, 1, 0.3, 1), transform 0.55s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+.anim-fade-up.visible {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
 }
 
-.anim-fade-up.visible,
-.anim-slide-left.visible,
-.anim-slide-right.visible,
+.anim-slide-left {
+  opacity: 0;
+  transform: translate3d(-30px, 0, 0);
+  transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+.anim-slide-left.visible {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+.anim-slide-right {
+  opacity: 0;
+  transform: translate3d(30px, 0, 0);
+  transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+.anim-slide-right.visible {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+.anim-scale-in {
+  opacity: 0;
+  transform: scale(0.92) translate3d(0, 12px, 0);
+  transition: opacity 0.55s cubic-bezier(0.16, 1, 0.3, 1), transform 0.55s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
 .anim-scale-in.visible {
   opacity: 1;
-  transform: translateY(0);
+  transform: scale(1) translate3d(0, 0, 0);
 }
 
 .anim-fade-in {
   opacity: 0;
-  transition: opacity 0.35s ease-out;
+  transition: opacity 0.5s ease-out;
+  will-change: opacity;
 }
 .anim-fade-in.visible {
   opacity: 1;
@@ -836,3 +864,165 @@ select.form-control option { background: #0b1628; color: var(--text-main); }
   clip: rect(0,0,0,0);
   border: 0;
 }
+
+/* ─── Sri Angalamman Brand Logo Keyframes & Animations ────────── */
+@keyframes logoAuraPulse {
+  0%, 100% {
+    transform: scale(0.96);
+    opacity: 0.45;
+    filter: blur(8px);
+  }
+  50% {
+    transform: scale(1.18);
+    opacity: 0.85;
+    filter: blur(14px);
+  }
+}
+
+@keyframes logoHaloSpin {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes logoHaloSpinReverse {
+  0%   { transform: rotate(360deg); }
+  100% { transform: rotate(0deg); }
+}
+
+@keyframes logoFloat {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-4px); }
+}
+
+@keyframes logoShineSweep {
+  0% {
+    left: -130%;
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.85;
+  }
+  42% {
+    left: 140%;
+    opacity: 0;
+  }
+  100% {
+    left: 140%;
+    opacity: 0;
+  }
+}
+
+@keyframes logoSparkleTwinkle {
+  0%, 100% {
+    transform: scale(0.6) rotate(0deg);
+    opacity: 0.25;
+  }
+  50% {
+    transform: scale(1.3) rotate(45deg);
+    opacity: 1;
+  }
+}
+
+.brand-logo-container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  cursor: pointer;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), filter 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}
+
+.brand-logo-container.animated:hover {
+  transform: translateY(-3px) scale(1.06) rotate(1deg);
+  filter: drop-shadow(0 0 20px rgba(249, 115, 22, 0.65)) brightness(1.08);
+}
+
+.brand-logo-aura {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(249, 115, 22, 0.5) 0%, rgba(37, 99, 235, 0.45) 55%, transparent 72%);
+  animation: logoAuraPulse 3.5s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.brand-logo-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1.5px dashed rgba(245, 158, 11, 0.6);
+  animation: logoHaloSpin 24s linear infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.brand-logo-ring-outer {
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  border: 1px dotted rgba(56, 189, 248, 0.45);
+  animation: logoHaloSpinReverse 32s linear infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.brand-logo-img-wrap {
+  position: relative;
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.7), 0 0 14px rgba(249, 115, 22, 0.35);
+  border: 2px solid rgba(251, 191, 36, 0.65);
+  background: #060d1e;
+  z-index: 2;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.brand-logo-container:hover .brand-logo-img-wrap {
+  border-color: rgba(251, 191, 36, 0.98);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.8), 0 0 24px rgba(249, 115, 22, 0.65);
+}
+
+.brand-logo-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.brand-logo-container:hover .brand-logo-img {
+  transform: scale(1.05);
+}
+
+.brand-logo-shine {
+  position: absolute;
+  top: 0;
+  left: -130%;
+  width: 70%;
+  height: 100%;
+  background: linear-gradient(110deg, transparent 20%, rgba(255, 255, 255, 0.55) 50%, rgba(251, 191, 36, 0.4) 60%, transparent 80%);
+  transform: skewX(-22deg);
+  animation: logoShineSweep 5s infinite cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.brand-logo-float {
+  animation: logoFloat 4s ease-in-out infinite;
+}
+
+.brand-sparkle-dot {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fef08a;
+  box-shadow: 0 0 8px #f59e0b;
+  animation: logoSparkleTwinkle 2.8s infinite ease-in-out;
+  pointer-events: none;
+  z-index: 4;
+}
+
