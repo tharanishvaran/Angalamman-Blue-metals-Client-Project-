@@ -8,7 +8,8 @@ import {
   FileText, 
   Truck, 
   LogOut,
-  ChevronDown
+  ChevronDown,
+  Bell
 } from 'lucide-react';
 import BrandLogo from './BrandLogo';
 
@@ -17,10 +18,13 @@ export default function Navbar({
   user, 
   admin, 
   onOpenQuote, 
+  onOpenDelivery,
   onOpenAuth, 
   onOpenAdminAuth, 
   onOpenDashboard, 
   onOpenAdminPortal, 
+  onOpenAdminNotifications,
+  adminUnreadCount = 0,
   onLogout 
 }) {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -119,14 +123,16 @@ export default function Navbar({
           style={{ 
             display: 'flex', 
             alignItems: 'center', 
-            gap: '0.75rem', 
+            gap: '0.65rem', 
             textDecoration: 'none', 
             color: '#fff',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            flexShrink: 0,
+            marginRight: '1rem'
           }}
         >
           <BrandLogo 
-            size={46}
+            size={44}
             showRing={true}
             showAura={true}
             showShine={true}
@@ -134,20 +140,22 @@ export default function Navbar({
             showFloat={false}
           />
           <div>
-            <div style={{ 
+            <div className="nav-brand-title" style={{ 
               fontWeight: 800, 
-              fontSize: '1.2rem', 
+              fontSize: '1.18rem', 
               letterSpacing: '-0.02em', 
-              lineHeight: 1.15 
+              lineHeight: 1.15,
+              whiteSpace: 'nowrap'
             }}>
               Sri Angalamman
             </div>
-            <div style={{ 
-              fontSize: '0.72rem', 
+            <div className="nav-brand-sub" style={{ 
+              fontSize: '0.70rem', 
               color: '#f97316', 
               fontWeight: 700, 
-              letterSpacing: '0.08em', 
-              textTransform: 'uppercase' 
+              letterSpacing: '0.07em', 
+              textTransform: 'uppercase',
+              whiteSpace: 'nowrap'
             }}>
               Blue Metals • Puducherry
             </div>
@@ -155,7 +163,7 @@ export default function Navbar({
         </a>
 
         {/* Desktop Navigation */}
-        <nav style={{ display: 'none', alignItems: 'center', gap: '1.25rem', margin: '0 1.5rem' }} className="desktop-nav">
+        <nav style={{ display: 'none', alignItems: 'center', gap: '1.1rem', margin: '0 0.85rem', flexShrink: 1 }} className="desktop-nav">
           {navLinks.map((link) => {
             const isActive = activeNav === link.href.replace('#', '');
             return (
@@ -218,15 +226,24 @@ export default function Navbar({
             <span>Call Now</span>
           </a>
 
-          {/* Get Quote CTA */}
+          {/* Site Delivery CTA */}
           <button
-            onClick={onOpenQuote}
-            className="btn btn-orange btn-sm btn-shimmer"
-            style={{ fontWeight: 600 }}
+            onClick={onOpenDelivery}
+            className="btn btn-outline btn-sm nav-site-delivery-btn"
+            style={{ 
+              color: '#38bdf8', 
+              borderColor: 'rgba(56, 189, 248, 0.4)', 
+              background: 'rgba(56, 189, 248, 0.08)',
+              fontWeight: 600,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.35rem'
+            }}
           >
-            <FileText size={15} />
-            <span>Get Quote</span>
+            <Truck size={14} />
+            <span>Site Delivery</span>
           </button>
+
 
           {/* User Account / Login */}
           {admin ? (
@@ -505,6 +522,51 @@ export default function Navbar({
             </button>
           )}
 
+          {/* Admin Notifications Bell (Only when admin is logged in on home website) */}
+          {admin && (
+            <button
+              onClick={onOpenAdminNotifications}
+              className="btn btn-outline btn-sm admin-notif-btn"
+              style={{
+                position: 'relative',
+                padding: '0.42rem 0.65rem',
+                borderRadius: '8px',
+                borderColor: adminUnreadCount > 0 ? 'rgba(239, 68, 68, 0.65)' : 'rgba(56, 189, 248, 0.4)',
+                background: adminUnreadCount > 0 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(15, 23, 42, 0.85)',
+                color: adminUnreadCount > 0 ? '#fca5a5' : '#38bdf8',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+              title="Admin Live Notifications (User Logins & Booked Materials)"
+            >
+              <Bell size={17} />
+              {adminUnreadCount > 0 && (
+                <span style={{
+                  position: 'absolute',
+                  top: '-5px',
+                  right: '-5px',
+                  background: '#ef4444',
+                  color: '#ffffff',
+                  fontSize: '0.66rem',
+                  fontWeight: 900,
+                  minWidth: '17px',
+                  height: '17px',
+                  borderRadius: '9999px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '0 3px',
+                  boxShadow: '0 0 8px rgba(239, 68, 68, 0.8)'
+                }}>
+                  {adminUnreadCount > 9 ? '9+' : adminUnreadCount}
+                </span>
+              )}
+            </button>
+          )}
+
           {/* Admin Portal Quick Button (if admin is authenticated) */}
           {admin && (
             <button
@@ -579,24 +641,37 @@ export default function Navbar({
             </a>
           ))}
 
-          <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
-            <a
-              href={`tel:${primaryPhone}`}
-              className="btn btn-outline"
-              style={{ flex: 1, justifyContent: 'center' }}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem', marginTop: '0.5rem' }}>
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                if (onOpenDelivery) onOpenDelivery();
+              }}
+              className="btn btn-primary"
+              style={{ justifyContent: 'center', fontWeight: 600, fontSize: '0.86rem' }}
             >
-              <Phone size={16} /> Call {primaryPhone}
-            </a>
+              <Truck size={15} /> Site Delivery
+            </button>
             <button
               onClick={() => {
                 setMobileMenuOpen(false);
                 onOpenQuote();
               }}
               className="btn btn-orange"
-              style={{ flex: 1, justifyContent: 'center' }}
+              style={{ justifyContent: 'center', fontWeight: 600, fontSize: '0.86rem' }}
             >
-              Get Quote
+              <FileText size={15} /> Get Quote
             </button>
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <a
+              href={`tel:${primaryPhone}`}
+              className="btn btn-outline"
+              style={{ flex: 1, justifyContent: 'center', fontSize: '0.86rem' }}
+            >
+              <Phone size={15} /> Call {primaryPhone}
+            </a>
           </div>
 
           <div style={{ paddingTop: '0.5rem', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
@@ -634,27 +709,51 @@ export default function Navbar({
                     </div>
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        onOpenAdminPortal();
+                      }}
+                      className="btn btn-primary"
+                      style={{ flex: 1, justifyContent: 'center', fontWeight: 700 }}
+                    >
+                      <ShieldCheck size={16} /> Open Admin Portal
+                    </button>
+                    <button
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        onLogout();
+                      }}
+                      className="btn btn-outline"
+                      style={{ borderColor: 'rgba(239, 68, 68, 0.3)', color: '#f87171' }}
+                      title="Sign Out"
+                    >
+                      <LogOut size={16} />
+                    </button>
+                  </div>
+
                   <button
                     onClick={() => {
                       setMobileMenuOpen(false);
-                      onOpenAdminPortal();
-                    }}
-                    className="btn btn-primary"
-                    style={{ flex: 1, justifyContent: 'center', fontWeight: 700 }}
-                  >
-                    <ShieldCheck size={16} /> Open Admin Portal
-                  </button>
-                  <button
-                    onClick={() => {
-                      setMobileMenuOpen(false);
-                      onLogout();
+                      onOpenAdminNotifications && onOpenAdminNotifications();
                     }}
                     className="btn btn-outline"
-                    style={{ borderColor: 'rgba(239, 68, 68, 0.3)', color: '#f87171' }}
-                    title="Sign Out"
+                    style={{
+                      borderColor: adminUnreadCount > 0 ? 'rgba(239, 68, 68, 0.6)' : 'rgba(56, 189, 248, 0.4)',
+                      color: adminUnreadCount > 0 ? '#fca5a5' : '#38bdf8',
+                      background: adminUnreadCount > 0 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(56, 189, 248, 0.08)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.45rem',
+                      fontWeight: 700,
+                      padding: '0.65rem'
+                    }}
                   >
-                    <LogOut size={16} />
+                    <Bell size={16} />
+                    <span>Live Activity Notifications {adminUnreadCount > 0 ? `(${adminUnreadCount} New)` : ''}</span>
                   </button>
                 </div>
               </div>
@@ -699,7 +798,18 @@ export default function Navbar({
 
       {/* Media query styling for navbar */}
       <style>{`
-        @media (min-width: 1024px) {
+        @media (max-width: 680px) {
+          .nav-site-delivery-btn {
+            display: none !important;
+          }
+          .nav-brand-title {
+            font-size: 1.02rem !important;
+          }
+          .nav-brand-sub {
+            font-size: 0.62rem !important;
+          }
+        }
+        @media (min-width: 1140px) {
           .desktop-nav {
             display: flex !important;
           }
@@ -708,6 +818,23 @@ export default function Navbar({
           }
           .mobile-toggle {
             display: none !important;
+          }
+        }
+        @media (min-width: 1140px) and (max-width: 1280px) {
+          .desktop-nav {
+            gap: 0.75rem !important;
+            margin: 0 0.5rem !important;
+          }
+          .desktop-nav a {
+            font-size: 0.84rem !important;
+          }
+        }
+        @media (max-width: 1139px) {
+          .desktop-nav {
+            display: none !important;
+          }
+          .mobile-toggle {
+            display: inline-flex !important;
           }
         }
       `}</style>

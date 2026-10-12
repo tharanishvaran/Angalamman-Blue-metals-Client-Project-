@@ -82,6 +82,7 @@ router.post('/admin', requireRole(['SUPER_ADMIN', 'ADMIN']), (req, res) => {
       customer_address,
       items,
       discount = 0,
+      paid_amount = 0,
       payment_status = 'Unpaid',
       notes
     } = req.body;
@@ -94,17 +95,25 @@ router.post('/admin', requireRole(['SUPER_ADMIN', 'ADMIN']), (req, res) => {
 
     let subtotal = 0;
     items.forEach(item => {
-      subtotal += parseFloat(item.quantity) * parseFloat(item.unit_price);
+      subtotal += (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0);
     });
 
     const parsedDiscount = parseFloat(discount) || 0;
     const grand_total = Math.max(0, subtotal - parsedDiscount);
+    const parsedPaid = Math.max(0, parseFloat(paid_amount) || 0);
+
+    let resolvedPaymentStatus = payment_status;
+    if (parsedPaid >= grand_total && grand_total > 0) {
+      resolvedPaymentStatus = 'Paid';
+    } else {
+      resolvedPaymentStatus = 'Partial';
+    }
 
     const insertInvoice = db.prepare(`
       INSERT INTO invoices (
         invoice_number, user_id, customer_name, customer_mobile, customer_email,
-        customer_address, subtotal, discount, grand_total, payment_status, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        customer_address, subtotal, discount, grand_total, paid_amount, payment_status, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const insertItem = db.prepare(`
@@ -123,19 +132,20 @@ router.post('/admin', requireRole(['SUPER_ADMIN', 'ADMIN']), (req, res) => {
         subtotal,
         parsedDiscount,
         grand_total,
-        payment_status,
+        parsedPaid,
+        resolvedPaymentStatus,
         notes || null
       );
       const invoiceId = result.lastInsertRowid;
 
       for (const item of items) {
-        const itemSubtotal = parseFloat(item.quantity) * parseFloat(item.unit_price);
+        const itemSubtotal = (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0);
         insertItem.run(
           invoiceId,
           item.material_name,
-          parseFloat(item.quantity),
+          parseFloat(item.quantity) || 1,
           item.unit || 'Load',
-          parseFloat(item.unit_price),
+          parseFloat(item.unit_price) || 0,
           itemSubtotal
         );
       }
@@ -156,17 +166,33 @@ router.post('/admin', requireRole(['SUPER_ADMIN', 'ADMIN']), (req, res) => {
   }
 });
 
-// Admin: Update payment status
+// Admin: Update payment status and/or paid amount
 router.put('/admin/:id/status', requireRole(['SUPER_ADMIN', 'ADMIN']), (req, res) => {
   try {
-    const { payment_status } = req.body;
+    const { payment_status, paid_amount } = req.body;
     const { id } = req.params;
 
-    if (!['Paid', 'Unpaid', 'Partial'].includes(payment_status)) {
-      return res.status(400).json({ error: 'Invalid payment status' });
+    const current = db.prepare('SELECT * FROM invoices WHERE id = ?').get(id);
+    if (!current) {
+      return res.status(404).json({ error: 'Invoice not found' });
     }
 
-    db.prepare('UPDATE invoices SET payment_status = ? WHERE id = ?').run(payment_status, id);
+    let newPaid = paid_amount !== undefined ? Math.max(0, parseFloat(paid_amount) || 0) : (current.paid_amount || 0);
+    let newStatus = payment_status || current.payment_status;
+
+    if (paid_amount !== undefined && !payment_status) {
+      if (newPaid >= current.grand_total && current.grand_total > 0) {
+        newStatus = 'Paid';
+      } else {
+        newStatus = 'Partial';
+      }
+    } else if (payment_status === 'Paid') {
+      if (newPaid < current.grand_total) {
+        newPaid = current.grand_total;
+      }
+    }
+
+    db.prepare('UPDATE invoices SET payment_status = ?, paid_amount = ? WHERE id = ?').run(newStatus, newPaid, id);
     const updated = db.prepare('SELECT * FROM invoices WHERE id = ?').get(id);
     const items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id = ?').all(id);
 

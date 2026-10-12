@@ -11,12 +11,14 @@ import ReviewsSection from './components/ReviewsSection';
 import LocationContact from './components/LocationContact';
 import Footer from './components/Footer';
 import WhatsAppFloat from './components/WhatsAppFloat';
+import { Bell } from 'lucide-react';
 
 // Modals
 import QuoteModal from './components/QuoteModal';
 import DeliveryModal from './components/DeliveryModal';
 import AuthModal from './components/AuthModal';
 import InvoiceViewModal from './components/InvoiceViewModal';
+import AdminNotificationPanel from './components/AdminNotificationPanel';
 
 // Dedicated Pages
 import CustomerDashboard from './pages/CustomerDashboard';
@@ -54,11 +56,53 @@ export default function App() {
   // Invoice Viewer Modal
   const [viewingInvoice, setViewingInvoice] = useState(null);
 
+  // Admin Home Page Live Notifications State
+  const [adminNotificationsOpen, setAdminNotificationsOpen] = useState(false);
+  const [adminUnreadCount, setAdminUnreadCount] = useState(0);
+
   const ADMIN_EMAILS = [
+    'tharanishvaranr@gmail.com',
     'angalammanbluemetalspondy@gmail.com',
     'sriangalammanbluemetalspondy@gmail.com',
     'admin@angalamman.com'
   ];
+
+  // Poll for admin notifications unread count when admin is active
+  useEffect(() => {
+    if (!admin) return;
+
+    const checkNotifications = async () => {
+      try {
+        const res = await api.getNotifications();
+        if (res && res.notifications) {
+          let clearedIds = [];
+          try {
+            clearedIds = JSON.parse(localStorage.getItem('angalamman_cleared_notif_ids') || '[]');
+          } catch (e) {}
+          const clearedSet = new Set(Array.isArray(clearedIds) ? clearedIds : []);
+          const activeNotifs = res.notifications.filter(n => !clearedSet.has(n.id));
+
+          const lastRead = Number(localStorage.getItem('angalamman_last_read_notif') || 0);
+          const unread = activeNotifs.filter(n => {
+            const time = new Date(n.created_at).getTime();
+            return !isNaN(time) && time > lastRead;
+          }).length;
+          setAdminUnreadCount(unread > 0 ? unread : 0);
+        }
+      } catch (err) {
+        // quiet ignore in background
+      }
+    };
+
+    checkNotifications();
+    const interval = setInterval(checkNotifications, 25000);
+    return () => clearInterval(interval);
+  }, [admin]);
+
+  const handleResetUnread = () => {
+    localStorage.setItem('angalamman_last_read_notif', Date.now().toString());
+    setAdminUnreadCount(0);
+  };
 
   useEffect(() => {
     // Check saved session
@@ -176,26 +220,30 @@ export default function App() {
     setActiveView('home');
   };
 
-  // Triggers for modals with pre-selected material (requires login before booking)
+  // Triggers for modals with pre-selected material — requires login before ordering / quotation
   const handleOpenQuoteWithMaterial = (materialName = '') => {
     if (!user && !admin) {
-      setPendingAction({ type: 'quote', material: materialName });
-      setAuthBannerMessage('Please sign in with Google or Email to request an official quotation');
+      setSelectedMaterialForModal(materialName || '');
+      setPendingAction({ type: 'quote', material: materialName || '' });
+      setAuthBannerMessage('Please sign in or register to request an official quotation');
+      setAuthInitialMode('customer');
       setAuthModalOpen(true);
       return;
     }
-    setSelectedMaterialForModal(materialName);
+    setSelectedMaterialForModal(materialName || '');
     setQuoteModalOpen(true);
   };
 
   const handleOpenDeliveryWithMaterial = (materialName = '') => {
     if (!user && !admin) {
-      setPendingAction({ type: 'delivery', material: materialName });
-      setAuthBannerMessage('Please sign in with Google or Email to book material delivery');
+      setSelectedMaterialForModal(materialName || '');
+      setPendingAction({ type: 'delivery', material: materialName || '' });
+      setAuthBannerMessage('Please sign in or register to book site delivery & order materials');
+      setAuthInitialMode('customer');
       setAuthModalOpen(true);
       return;
     }
-    setSelectedMaterialForModal(materialName);
+    setSelectedMaterialForModal(materialName || '');
     setDeliveryModalOpen(true);
   };
 
@@ -237,6 +285,7 @@ export default function App() {
             user={user}
             admin={admin}
             onOpenQuote={() => handleOpenQuoteWithMaterial()}
+            onOpenDelivery={() => handleOpenDeliveryWithMaterial()}
             onOpenAuth={() => {
               setAuthInitialMode('customer');
               setAuthModalOpen(true);
@@ -247,6 +296,8 @@ export default function App() {
             }}
             onOpenDashboard={() => setActiveView('customer-dashboard')}
             onOpenAdminPortal={() => setActiveView('admin-portal')}
+            onOpenAdminNotifications={() => setAdminNotificationsOpen(true)}
+            adminUnreadCount={adminUnreadCount}
             onLogout={handleLogout}
           />
 
@@ -291,7 +342,14 @@ export default function App() {
 
             <LocationContact
               settings={settings}
+              user={user || admin}
               onOpenQuote={() => handleOpenQuoteWithMaterial()}
+              onRequireLogin={(mat) => {
+                setPendingAction({ type: 'quote', material: mat || 'M-Sand' });
+                setAuthBannerMessage('Please sign in or register to request an official quotation');
+                setAuthInitialMode('customer');
+                setAuthModalOpen(true);
+              }}
             />
           </main>
 
@@ -313,6 +371,58 @@ export default function App() {
             settings={settings}
             onOpenQuote={() => handleOpenQuoteWithMaterial()}
           />
+
+          {/* Floating Admin Notifications Trigger Button (Visible only when admin is logged in) */}
+          {admin && (
+            <button
+              onClick={() => setAdminNotificationsOpen(true)}
+              className="admin-floating-notif-btn"
+              style={{
+                position: 'fixed',
+                bottom: '5.5rem',
+                left: '1.25rem',
+                zIndex: 899,
+                background: adminUnreadCount > 0 
+                  ? 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)' 
+                  : 'linear-gradient(135deg, #0b172d 0%, #172554 100%)',
+                color: '#ffffff',
+                border: adminUnreadCount > 0 ? '1.5px solid rgba(239, 68, 68, 0.7)' : '1.5px solid rgba(56, 189, 248, 0.5)',
+                borderRadius: '9999px',
+                padding: '0.6rem 1.05rem',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                cursor: 'pointer',
+                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.65), 0 0 16px rgba(56, 189, 248, 0.25)',
+                fontWeight: 700,
+                fontSize: '0.82rem',
+                transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
+              }}
+              title="Open Live Activity Notifications"
+            >
+              <Bell size={16} className={adminUnreadCount > 0 ? 'animate-bounce' : ''} />
+              <span className="admin-floating-notif-label">Live Activity</span>
+              {adminUnreadCount > 0 && (
+                <span style={{
+                  background: '#ffffff',
+                  color: '#dc2626',
+                  fontSize: '0.68rem',
+                  fontWeight: 900,
+                  minWidth: '18px',
+                  height: '18px',
+                  borderRadius: '9999px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '0 3px',
+                  marginLeft: '2px',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.4)'
+                }}>
+                  {adminUnreadCount > 9 ? '9+' : adminUnreadCount}
+                </span>
+              )}
+            </button>
+          )}
         </>
       )}
 
@@ -322,7 +432,7 @@ export default function App() {
         onClose={() => setQuoteModalOpen(false)}
         initialMaterial={selectedMaterialForModal}
         materials={materials}
-        user={user}
+        user={user || admin}
         onRequireLogin={() => {
           setQuoteModalOpen(false);
           setPendingAction({ type: 'quote', material: selectedMaterialForModal });
@@ -337,11 +447,11 @@ export default function App() {
         onClose={() => setDeliveryModalOpen(false)}
         initialMaterial={selectedMaterialForModal}
         materials={materials}
-        user={user}
+        user={user || admin}
         onRequireLogin={() => {
           setDeliveryModalOpen(false);
           setPendingAction({ type: 'delivery', material: selectedMaterialForModal });
-          setAuthBannerMessage('Please sign in with Google to book material delivery');
+          setAuthBannerMessage('Please sign in or register to book site delivery & order materials');
           setAuthInitialMode('customer');
           setAuthModalOpen(true);
         }}
@@ -363,6 +473,20 @@ export default function App() {
         business={settings}
         onClose={() => setViewingInvoice(null)}
       />
+
+      {/* Admin Home Page Live Notifications Drawer */}
+      {admin && (
+        <AdminNotificationPanel
+          isOpen={adminNotificationsOpen}
+          onClose={() => setAdminNotificationsOpen(false)}
+          onOpenAdminPortal={() => {
+            setAdminNotificationsOpen(false);
+            setActiveView('admin-portal');
+          }}
+          unreadCount={adminUnreadCount}
+          onResetUnread={handleResetUnread}
+        />
+      )}
 
     </div>
   );

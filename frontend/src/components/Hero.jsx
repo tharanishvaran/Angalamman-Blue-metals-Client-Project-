@@ -152,6 +152,15 @@ export default function Hero({ settings, onOpenQuote, onOpenDelivery }) {
                 <span>Get Instant Quote</span>
               </button>
 
+              <button 
+                onClick={onOpenDelivery}
+                className="btn btn-outline btn-lg"
+                style={{ color: '#fb923c', borderColor: 'rgba(249, 115, 22, 0.45)', background: 'rgba(249, 115, 22, 0.1)' }}
+              >
+                <Truck size={18} />
+                <span>Book Site Delivery</span>
+              </button>
+
               <a 
                 href={mapsUrl}
                 target="_blank"
@@ -303,24 +312,9 @@ export default function Hero({ settings, onOpenQuote, onOpenDelivery }) {
               </div>
             </div>
 
-            {/* Official Animated Brand Seal Medallion */}
+            {/* Official Animated Brand Seal Medallion — top-left corner of image */}
             <div 
-              className="animate-float"
-              style={{
-                position: 'absolute',
-                top: '-24px',
-                left: '-14px',
-                background: 'rgba(7, 14, 28, 0.94)',
-                backdropFilter: 'blur(16px)',
-                border: '1.5px solid rgba(245, 158, 11, 0.55)',
-                borderRadius: '9999px',
-                padding: '0.4rem 1rem 0.4rem 0.5rem',
-                boxShadow: '0 14px 36px rgba(0, 0, 0, 0.75), 0 0 24px rgba(245, 158, 11, 0.25)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.65rem',
-                zIndex: 22
-              }}
+              className="hero-seal-medallion animate-float"
             >
               <BrandLogo 
                 size={44} 
@@ -339,30 +333,17 @@ export default function Hero({ settings, onOpenQuote, onOpenDelivery }) {
               </div>
             </div>
 
-            {/* Floating Top Badge with Radar Dot */}
-            <div 
-              style={{
-                position: 'absolute',
-                top: '-16px',
-                right: '18px',
-                background: 'rgba(10, 18, 36, 0.95)',
-                border: '1px solid rgba(59, 130, 246, 0.45)',
-                borderRadius: '9999px',
-                padding: '0.55rem 1.1rem',
-                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.6)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.65rem',
-                zIndex: 20
-              }}
-            >
+          </AnimatedSection>
+
+          {/* Open Now badge — sits below the image card, aligned right, fully separate */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.85rem' }}>
+            <div className="hero-open-badge-inline">
               <div className="radar-dot" />
               <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#f8fafc', letterSpacing: '0.02em' }}>
                 Open Now • Dispatches Active
               </span>
             </div>
-
-          </AnimatedSection>
+          </div>
 
         </div>
 

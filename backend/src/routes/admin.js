@@ -9,11 +9,13 @@ router.get('/dashboard', requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF']), (req, r
   try {
     const totalCustomers = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
     const totalOrders = db.prepare('SELECT COUNT(*) as count FROM orders').get().count;
+    const totalDeliveries = db.prepare('SELECT COUNT(*) as count FROM delivery_requests').get().count;
     const pendingQuotes = db.prepare("SELECT COUNT(*) as count FROM quote_requests WHERE status = 'Pending'").get().count;
     const pendingDeliveries = db.prepare("SELECT COUNT(*) as count FROM delivery_requests WHERE status IN ('Pending', 'Confirmed')").get().count;
     const totalQuotes = db.prepare('SELECT COUNT(*) as count FROM quote_requests').get().count;
 
     const todayOrders = db.prepare("SELECT COUNT(*) as count FROM orders WHERE date(created_at) = date('now')").get().count;
+    const todayDeliveries = db.prepare("SELECT COUNT(*) as count FROM delivery_requests WHERE date(created_at) = date('now')").get().count;
     const revenueRow = db.prepare("SELECT COALESCE(SUM(grand_total), 0) as total FROM invoices WHERE payment_status = 'Paid'").get();
     const totalRevenue = revenueRow ? revenueRow.total : 0;
 
@@ -37,31 +39,67 @@ router.get('/dashboard', requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF']), (req, r
       LIMIT 6
     `).all();
 
-    // Recent orders
-    const recentOrders = db.prepare(`
-      SELECT id, order_number, customer_name, customer_mobile, final_amount, status, created_at
+    // Recent orders: combine site delivery bookings and direct orders
+    const recentDeliveries = db.prepare(`
+      SELECT 
+        id, 
+        request_number as order_number, 
+        customer_name, 
+        customer_mobile, 
+        material_name,
+        quantity,
+        unit,
+        delivery_address,
+        NULL as final_amount,
+        status, 
+        'DELIVERY' as order_type,
+        created_at
+      FROM delivery_requests
+      ORDER BY created_at DESC
+      LIMIT 8
+    `).all();
+
+    const recentDirectOrders = db.prepare(`
+      SELECT 
+        id, 
+        order_number, 
+        customer_name, 
+        customer_mobile, 
+        NULL as material_name,
+        NULL as quantity,
+        NULL as unit,
+        delivery_address,
+        final_amount, 
+        status, 
+        'DIRECT' as order_type,
+        created_at
       FROM orders
       ORDER BY created_at DESC
-      LIMIT 5
+      LIMIT 8
     `).all();
+
+    const recentOrders = [...recentDeliveries, ...recentDirectOrders]
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(0, 8);
 
     // Recent quotes
     const recentQuotes = db.prepare(`
-      SELECT id, request_number, customer_name, customer_mobile, material_name, quantity, unit, status, created_at
+      SELECT id, request_number, customer_name, customer_mobile, customer_email, material_name, quantity, unit, delivery_location, status, created_at
       FROM quote_requests
       ORDER BY created_at DESC
-      LIMIT 5
+      LIMIT 8
     `).all();
 
     res.json({
       metrics: {
         totalCustomers,
-        totalOrders,
+        totalOrders: totalOrders + totalDeliveries,
         pendingRequests: pendingQuotes + pendingDeliveries,
         pendingQuotes,
         pendingDeliveries,
         totalQuotes,
-        todayOrders,
+        totalDeliveries,
+        todayOrders: todayOrders + todayDeliveries,
         totalRevenue,
         activeMaterials
       },
@@ -78,10 +116,265 @@ router.get('/dashboard', requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF']), (req, r
   }
 });
 
+// Live Real-Time Admin Notifications: User Logins, Booked Materials, Booked Services
+// Live Real-Time Admin Notifications: User Logins, Booked Materials, Booked Services, Direct Orders
+router.get('/notifications', requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF']), (req, res) => {
+  try {
+    function formatUtcIso(dStr) {
+      if (!dStr) return new Date().toISOString();
+      if (dStr.endsWith('Z') || dStr.includes('+')) return new Date(dStr).toISOString();
+      const parsed = new Date(dStr.replace(' ', 'T') + 'Z');
+      return isNaN(parsed.getTime()) ? new Date(dStr).toISOString() : parsed.toISOString();
+    }
+
+    // 1. Material Bookings (Deliveries)
+    const deliveries = db.prepare(`
+      SELECT 
+        id,
+        request_number,
+        customer_name,
+        customer_mobile,
+        customer_email,
+        material_name,
+        quantity,
+        unit,
+        delivery_address,
+        preferred_date,
+        additional_notes,
+        status,
+        created_at
+      FROM delivery_requests
+      ORDER BY created_at DESC
+      LIMIT 30
+    `).all();
+
+    // 2. Direct Material Orders
+    const directOrders = db.prepare(`
+      SELECT 
+        o.id,
+        o.order_number as request_number,
+        o.customer_name,
+        o.customer_mobile,
+        o.delivery_address,
+        o.final_amount,
+        o.status,
+        o.created_at,
+        (
+          SELECT GROUP_CONCAT(quantity || ' ' || unit || ' of ' || material_name, ', ')
+          FROM order_items oi
+          WHERE oi.order_id = o.id
+        ) as items_summary
+      FROM orders o
+      ORDER BY o.created_at DESC
+      LIMIT 30
+    `).all();
+
+    // 3. Service Bookings & Quotes
+    const quotes = db.prepare(`
+      SELECT 
+        id,
+        request_number,
+        customer_name,
+        customer_mobile,
+        customer_email,
+        material_name,
+        quantity,
+        unit,
+        delivery_location,
+        message,
+        status,
+        created_at
+      FROM quote_requests
+      ORDER BY created_at DESC
+      LIMIT 30
+    `).all();
+
+    // 4. User Logins and Customer Accounts
+    const historyLogins = db.prepare(`
+      SELECT 
+        lh.id as login_id,
+        u.id as user_id,
+        u.name as customer_name,
+        u.mobile as customer_mobile,
+        u.email as customer_email,
+        u.address as customer_address,
+        u.login_count,
+        lh.login_time as created_at
+      FROM login_history lh
+      JOIN users u ON lh.user_id = u.id
+      WHERE u.role != 'SUPER_ADMIN'
+      ORDER BY lh.login_time DESC
+      LIMIT 25
+    `).all();
+
+    const userAccounts = db.prepare(`
+      SELECT 
+        u.id as user_id,
+        u.name as customer_name,
+        u.mobile as customer_mobile,
+        u.email as customer_email,
+        u.address as customer_address,
+        u.login_count,
+        COALESCE(u.last_login, u.created_at) as created_at
+      FROM users u
+      WHERE u.role != 'SUPER_ADMIN'
+      ORDER BY COALESCE(u.last_login, u.created_at) DESC
+      LIMIT 25
+    `).all();
+
+    const seenUserIds = new Set();
+    const customerLogins = [];
+
+    // Prioritize specific session history
+    historyLogins.forEach(hl => {
+      seenUserIds.add(hl.user_id);
+      customerLogins.push(hl);
+    });
+
+    // Also include all customer accounts
+    userAccounts.forEach(ua => {
+      if (!seenUserIds.has(ua.user_id)) {
+        customerLogins.push({
+          login_id: null,
+          ...ua
+        });
+      }
+    });
+
+    const items = [];
+
+    // Map deliveries (Booked Materials)
+    deliveries.forEach(del => {
+      items.push({
+        id: `del-${del.id}`,
+        type: 'MATERIAL_BOOKED',
+        badge: 'Material Booked',
+        badge_color: '#38bdf8',
+        reference_no: del.request_number,
+        user_name: del.customer_name || 'Customer',
+        mobile: del.customer_mobile || '',
+        address: del.delivery_address || 'Puducherry Site',
+        email: del.customer_email || '',
+        booked_service_or_material: `${del.quantity} ${del.unit || 'Unit'} - ${del.material_name}`,
+        details: {
+          material: del.material_name,
+          quantity: del.quantity,
+          unit: del.unit || 'Unit',
+          preferred_date: del.preferred_date || 'Earliest dispatch',
+          notes: del.additional_notes || '',
+          status: del.status || 'Pending'
+        },
+        created_at: formatUtcIso(del.created_at)
+      });
+    });
+
+    // Map direct orders (Material Orders)
+    directOrders.forEach(ord => {
+      items.push({
+        id: `ord-${ord.id}`,
+        type: 'MATERIAL_BOOKED',
+        badge: 'Order Placed',
+        badge_color: '#38bdf8',
+        reference_no: ord.request_number,
+        user_name: ord.customer_name || 'Customer',
+        mobile: ord.customer_mobile || '',
+        address: ord.delivery_address || 'Puducherry Site',
+        email: '',
+        booked_service_or_material: ord.items_summary || 'Construction Materials',
+        details: {
+          material: ord.items_summary || 'Materials',
+          amount: ord.final_amount,
+          status: ord.status || 'Pending'
+        },
+        created_at: formatUtcIso(ord.created_at)
+      });
+    });
+
+    // Map quotes (Booked Services / Quotes)
+    quotes.forEach(q => {
+      items.push({
+        id: `quote-${q.id}`,
+        type: 'SERVICE_BOOKED',
+        badge: 'Service / Quote Booked',
+        badge_color: '#f59e0b',
+        reference_no: q.request_number,
+        user_name: q.customer_name || 'Customer',
+        mobile: q.customer_mobile || '',
+        address: q.delivery_location || 'Puducherry Site',
+        email: q.customer_email || '',
+        booked_service_or_material: `${q.quantity} ${q.unit || 'Unit'} - ${q.material_name}`,
+        details: {
+          material: q.material_name,
+          quantity: q.quantity,
+          unit: q.unit || 'Unit',
+          message: q.message || '',
+          status: q.status || 'Pending'
+        },
+        created_at: formatUtcIso(q.created_at)
+      });
+    });
+
+    // Map user logins / signups
+    customerLogins.forEach(ul => {
+      const loginId = ul.login_id 
+        ? `login-${ul.login_id}` 
+        : `user-${ul.user_id}-${(ul.created_at || '').replace(/[^0-9]/g, '')}`;
+      items.push({
+        id: loginId,
+        type: 'USER_LOGIN',
+        badge: 'Customer Account Login',
+        badge_color: '#10b981',
+        reference_no: `CUST-${ul.user_id}`,
+        user_name: ul.customer_name || 'Customer',
+        mobile: ul.customer_mobile || 'Not provided',
+        address: ul.customer_address || 'Puducherry',
+        email: ul.customer_email || '',
+        booked_service_or_material: null,
+        details: {
+          login_count: ul.login_count || 1
+        },
+        created_at: formatUtcIso(ul.created_at)
+      });
+    });
+
+    // Sort newest first
+    items.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    res.json({
+      notifications: items,
+      total_count: items.length
+    });
+  } catch (err) {
+    console.error('Admin notifications error:', err);
+    res.status(500).json({ error: 'Failed to retrieve notifications' });
+  }
+});
+
 // Customer Management: List all customers with login details and activity
 router.get('/users', requireRole(['SUPER_ADMIN', 'ADMIN']), (req, res) => {
   try {
     const { search, status, logged_in } = req.query;
+
+    // First, ensure all admin accounts are synced to users table so they appear in user directory
+    try {
+      const allAdmins = db.prepare('SELECT * FROM admins').all();
+      for (const adm of allAdmins) {
+        const u = db.prepare('SELECT id, role FROM users WHERE LOWER(email) = ?').get(adm.email.toLowerCase().trim());
+        if (u) {
+          if (u.role !== adm.role) {
+            db.prepare('UPDATE users SET role = ?, status = ? WHERE id = ?').run(adm.role, adm.status, u.id);
+          }
+        } else {
+          db.prepare(`
+            INSERT INTO users (name, email, profile_image, role, login_count, first_login, last_login, status)
+            VALUES (?, ?, ?, ?, 1, ?, ?, ?)
+          `).run(adm.name, adm.email.toLowerCase().trim(), adm.profile_image || null, adm.role, adm.last_login || adm.created_at, adm.last_login || adm.created_at, adm.status);
+        }
+      }
+    } catch (syncErr) {
+      console.warn('Admin user sync warning:', syncErr.message);
+    }
+
     let query = `
       SELECT 
         u.id, u.name, u.email, u.mobile, u.profile_image, u.role, 
@@ -132,13 +425,27 @@ router.get('/users/:id', requireRole(['SUPER_ADMIN', 'ADMIN']), (req, res) => {
     }
 
     const orders = db.prepare('SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC').all(id);
+    const deliveries = db.prepare(`
+      SELECT * FROM delivery_requests 
+      WHERE user_id = ? 
+         OR (customer_mobile IS NOT NULL AND customer_mobile != '' AND customer_mobile = ?) 
+         OR (customer_email IS NOT NULL AND customer_email != '' AND LOWER(customer_email) = ?)
+      ORDER BY created_at DESC
+    `).all(id, customer.mobile || '', (customer.email || '').toLowerCase());
     const invoices = db.prepare('SELECT * FROM invoices WHERE user_id = ? ORDER BY created_at DESC').all(id);
-    const quotes = db.prepare('SELECT * FROM quote_requests WHERE user_id = ? ORDER BY created_at DESC').all(id);
+    const quotes = db.prepare(`
+      SELECT * FROM quote_requests 
+      WHERE user_id = ? 
+         OR (customer_mobile IS NOT NULL AND customer_mobile != '' AND customer_mobile = ?) 
+         OR (customer_email IS NOT NULL AND customer_email != '' AND LOWER(customer_email) = ?)
+      ORDER BY created_at DESC
+    `).all(id, customer.mobile || '', (customer.email || '').toLowerCase());
     const loginHistory = db.prepare('SELECT * FROM login_history WHERE user_id = ? ORDER BY login_time DESC LIMIT 20').all(id);
 
     res.json({
       customer,
       orders,
+      deliveries,
       invoices,
       quotes,
       loginHistory

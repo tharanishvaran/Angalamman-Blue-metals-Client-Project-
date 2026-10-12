@@ -8,8 +8,8 @@ function generateQuoteNumber() {
   return `QTE-${Date.now().toString().slice(-4)}${rand}`;
 }
 
-// Public / Customer: Create Quote Request
-router.post('/', optionalAuthenticate, (req, res) => {
+// Customer / Authenticated User: Create Quote Request
+router.post('/', authenticate, (req, res) => {
   try {
     const {
       customer_name,
@@ -27,7 +27,21 @@ router.post('/', optionalAuthenticate, (req, res) => {
     }
 
     const request_number = generateQuoteNumber();
-    const user_id = req.user ? req.user.id : null;
+    let user_id = null;
+    const cleanEmail = customer_email ? customer_email.trim().toLowerCase() : '';
+    const cleanMobile = customer_mobile ? customer_mobile.trim() : '';
+
+    if (req.user) {
+      if (!req.user.is_admin) {
+        user_id = req.user.id;
+      } else {
+        const userRow = db.prepare('SELECT id FROM users WHERE LOWER(email) = ?').get(cleanEmail || (req.user.email || '').toLowerCase().trim());
+        user_id = userRow ? userRow.id : null;
+      }
+    } else if (cleanEmail) {
+      const userRow = db.prepare('SELECT id FROM users WHERE LOWER(email) = ?').get(cleanEmail);
+      if (userRow) user_id = userRow.id;
+    }
 
     const stmt = db.prepare(`
       INSERT INTO quote_requests (
@@ -44,7 +58,7 @@ router.post('/', optionalAuthenticate, (req, res) => {
       customer_email ? customer_email.trim() : null,
       material_name,
       parseFloat(quantity),
-      unit || 'Load',
+      unit || 'Unit',
       delivery_location.trim(),
       message ? message.trim() : null
     );
@@ -60,10 +74,25 @@ router.post('/', optionalAuthenticate, (req, res) => {
   }
 });
 
-// Customer: Get my quote requests
+// Customer / Admin: Get my quote requests
 router.get('/my', authenticate, (req, res) => {
   try {
-    const quotes = db.prepare('SELECT * FROM quote_requests WHERE user_id = ? ORDER BY created_at DESC').all(req.user.id);
+    const userEmail = (req.user.email || '').toLowerCase().trim();
+    const userMobile = (req.user.mobile || '').trim();
+    let customerUserId = !req.user.is_admin ? req.user.id : null;
+
+    if (req.user.is_admin) {
+      const u = db.prepare('SELECT id FROM users WHERE LOWER(email) = ?').get(userEmail);
+      if (u) customerUserId = u.id;
+    }
+
+    const quotes = db.prepare(`
+      SELECT * FROM quote_requests 
+      WHERE (user_id IS NOT NULL AND user_id = ?)
+         OR (customer_email IS NOT NULL AND customer_email != '' AND LOWER(customer_email) = ?)
+         OR (customer_mobile IS NOT NULL AND customer_mobile != '' AND customer_mobile = ?)
+      ORDER BY created_at DESC
+    `).all(customerUserId, userEmail, userMobile);
     res.json(quotes);
   } catch (err) {
     res.status(500).json({ error: 'Failed to load your quote requests' });

@@ -9,7 +9,7 @@ function getHeaders(isJson = true) {
   return headers;
 }
 
-async function fetchWithTimeout(url, options = {}, timeoutMs = 2500) {
+async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -33,7 +33,7 @@ async function request(endpoint, options = {}) {
     const res = await fetchWithTimeout(`${PRIMARY_API}${endpoint}`, {
       ...options,
       headers
-    }, 2500);
+    }, 15000);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       throw new Error(data.error || 'Server error occurred');
@@ -47,7 +47,7 @@ async function request(endpoint, options = {}) {
         const fallbackRes = await fetchWithTimeout(`${CLOUD_FALLBACK_API}${endpoint}`, {
           ...options,
           headers
-        }, 3500);
+        }, 20000);
         const fallbackData = await fallbackRes.json().catch(() => ({}));
         if (!fallbackRes.ok) {
           throw new Error(fallbackData.error || 'Server error occurred');
@@ -130,7 +130,12 @@ export const api = {
     return request(`/invoices/admin${query ? `?${query}` : ''}`);
   },
   createInvoice: (data) => request('/invoices/admin', { method: 'POST', body: JSON.stringify(data) }),
-  updateInvoicePaymentStatus: (id, status) => request(`/invoices/admin/${id}/status`, { method: 'PUT', body: JSON.stringify({ payment_status: status }) }),
+  updateInvoicePaymentStatus: (id, statusOrData, optionalPaid) => {
+    const payload = typeof statusOrData === 'object' 
+      ? statusOrData 
+      : { payment_status: statusOrData, ...(optionalPaid !== undefined ? { paid_amount: optionalPaid } : {}) };
+    return request(`/invoices/admin/${id}/status`, { method: 'PUT', body: JSON.stringify(payload) });
+  },
 
   // Reviews
   getReviews: () => request('/reviews'),
@@ -141,6 +146,7 @@ export const api = {
 
   // Admin & Settings
   getDashboardStats: () => request('/admin/dashboard'),
+  getNotifications: () => request('/admin/notifications'),
   getCustomers: (params = {}) => {
     const query = new URLSearchParams(params).toString();
     return request(`/admin/users${query ? `?${query}` : ''}`);

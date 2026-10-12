@@ -31,7 +31,7 @@ export default function QuoteModal({
     email: '',
     material: initialMaterial || 'M-Sand (Manufactured Sand)',
     quantity: '1',
-    unit: 'Load',
+    unit: 'Unit',
     location: '',
     location_link: '',
     message: ''

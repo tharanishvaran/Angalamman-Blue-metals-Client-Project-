@@ -8,8 +8,8 @@ function generateDeliveryNumber() {
   return `DEL-${Date.now().toString().slice(-4)}${rand}`;
 }
 
-// Customer / Public: Submit Delivery Request
-router.post('/', optionalAuthenticate, (req, res) => {
+// Customer / Authenticated User: Submit Delivery Request
+router.post('/', authenticate, (req, res) => {
   try {
     const {
       customer_name,
@@ -19,16 +19,37 @@ router.post('/', optionalAuthenticate, (req, res) => {
       quantity,
       unit,
       delivery_address,
+      location_link,
       preferred_date,
       additional_notes
     } = req.body;
 
-    if (!customer_name || !customer_mobile || !material_name || !quantity || !delivery_address) {
-      return res.status(400).json({ error: 'Please enter all required delivery details' });
+    const resolvedAddress = (delivery_address && delivery_address.trim()) 
+      ? delivery_address.trim() 
+      : (location_link && location_link.trim()) 
+        ? `📍 Google Maps Pin: ${location_link.trim()}` 
+        : '';
+
+    if (!customer_name || !customer_mobile || !material_name || !quantity || !resolvedAddress) {
+      return res.status(400).json({ error: 'Please enter all required delivery details (Site Address or Maps Location required)' });
     }
 
     const request_number = generateDeliveryNumber();
-    const user_id = req.user ? req.user.id : null;
+    let user_id = null;
+    const cleanEmail = customer_email ? customer_email.trim().toLowerCase() : '';
+    const cleanMobile = customer_mobile ? customer_mobile.trim() : '';
+
+    if (req.user) {
+      if (!req.user.is_admin) {
+        user_id = req.user.id;
+      } else {
+        const userRow = db.prepare('SELECT id FROM users WHERE LOWER(email) = ?').get(cleanEmail || (req.user.email || '').toLowerCase().trim());
+        user_id = userRow ? userRow.id : null;
+      }
+    } else if (cleanEmail) {
+      const userRow = db.prepare('SELECT id FROM users WHERE LOWER(email) = ?').get(cleanEmail);
+      if (userRow) user_id = userRow.id;
+    }
 
     const stmt = db.prepare(`
       INSERT INTO delivery_requests (
@@ -45,8 +66,8 @@ router.post('/', optionalAuthenticate, (req, res) => {
       customer_email ? customer_email.trim() : null,
       material_name,
       parseFloat(quantity),
-      unit || 'Load',
-      delivery_address.trim(),
+      unit || 'Unit',
+      resolvedAddress,
       preferred_date || null,
       additional_notes ? additional_notes.trim() : null
     );
@@ -63,10 +84,25 @@ router.post('/', optionalAuthenticate, (req, res) => {
   }
 });
 
-// Customer: Get my delivery requests
+// Customer / Admin: Get my delivery requests
 router.get('/my', authenticate, (req, res) => {
   try {
-    const deliveries = db.prepare('SELECT * FROM delivery_requests WHERE user_id = ? ORDER BY created_at DESC').all(req.user.id);
+    const userEmail = (req.user.email || '').toLowerCase().trim();
+    const userMobile = (req.user.mobile || '').trim();
+    let customerUserId = !req.user.is_admin ? req.user.id : null;
+
+    if (req.user.is_admin) {
+      const u = db.prepare('SELECT id FROM users WHERE LOWER(email) = ?').get(userEmail);
+      if (u) customerUserId = u.id;
+    }
+
+    const deliveries = db.prepare(`
+      SELECT * FROM delivery_requests 
+      WHERE (user_id IS NOT NULL AND user_id = ?)
+         OR (customer_email IS NOT NULL AND customer_email != '' AND LOWER(customer_email) = ?)
+         OR (customer_mobile IS NOT NULL AND customer_mobile != '' AND customer_mobile = ?)
+      ORDER BY created_at DESC
+    `).all(customerUserId, userEmail, userMobile);
     res.json(deliveries);
   } catch (err) {
     res.status(500).json({ error: 'Failed to retrieve delivery requests' });

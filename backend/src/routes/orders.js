@@ -8,8 +8,8 @@ function generateOrderNumber() {
   return `ORD-${Date.now().toString().slice(-4)}${rand}`;
 }
 
-// Create Order (Customer or Guest)
-router.post('/', optionalAuthenticate, (req, res) => {
+// Create Order (Authenticated Customer or Admin)
+router.post('/', authenticate, (req, res) => {
   try {
     const {
       customer_name,

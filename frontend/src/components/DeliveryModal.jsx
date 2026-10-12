@@ -62,8 +62,8 @@ export default function DeliveryModal({
     mobile: '',
     email: '',
     material: initialMaterial || 'M-Sand (Manufactured Sand)',
-    quantity: '2',
-    unit: 'Ton', // Restrict exclusively to Ton
+    quantity: '1',
+    unit: 'Unit', // Default to Unit, switchable between Unit and Ton
     address: '',
     location_link: '',
     preferred_date: todayDateString,
@@ -101,19 +101,26 @@ export default function DeliveryModal({
       setForm((prev) => ({ 
         ...prev, 
         material: match ? match.name : initialMaterial,
-        unit: 'Ton'
+        quantity: '1',
+        unit: 'Unit'
       }));
     }
   }, [initialMaterial, availableMaterials]);
 
-  // Find active material price per Ton
+  // Find active material object
   const activeMaterialObj = useMemo(() => {
     return availableMaterials.find(m => 
       m.name === form.material ||
       m.name.toLowerCase().includes(form.material.toLowerCase()) ||
       form.material.toLowerCase().includes(m.name.toLowerCase())
-    ) || availableMaterials[0] || { price: 1600, unit: 'Ton' };
+    ) || availableMaterials[0] || { price: 3600, unit: 'Unit' };
   }, [form.material, availableMaterials]);
+
+  // Unit rate (Standard Yard price per Unit)
+  const unitPricePerUnit = useMemo(() => {
+    if (!activeMaterialObj) return 3600;
+    return activeMaterialObj.price || 3600;
+  }, [activeMaterialObj]);
 
   // Ton price: if standard load price is provided, convert or display authentic per-ton rate
   const unitPricePerTon = useMemo(() => {
@@ -122,7 +129,7 @@ export default function DeliveryModal({
     if (activeMaterialObj.unit && activeMaterialObj.unit.toLowerCase() === 'ton') {
       return base;
     }
-    // Transparent conversion for bulk materials (1 standard tipper load ~ 2.5 - 3 tons)
+    // Transparent conversion for bulk materials (1 standard tipper unit ~ 2.5 - 3 tons)
     if (activeMaterialObj.name.includes('M-Sand')) return 1600;
     if (activeMaterialObj.name.includes('P-Sand')) return 1750;
     if (activeMaterialObj.name.includes('River Sand')) return 2200;
@@ -136,8 +143,9 @@ export default function DeliveryModal({
     return Math.round(base / 2.5);
   }, [activeMaterialObj]);
 
+  const activeRate = form.unit === 'Ton' ? unitPricePerTon : unitPricePerUnit;
   const numQuantity = Math.max(0, parseFloat(form.quantity) || 0);
-  const estimatedSubtotal = Math.round(unitPricePerTon * numQuantity);
+  const estimatedSubtotal = Math.round(activeRate * numQuantity);
 
   // Field validation logic
   const validateField = (fieldName, value) => {
@@ -170,10 +178,10 @@ export default function DeliveryModal({
         return '';
 
       case 'quantity':
-        if (!value || isNaN(value)) return 'Please specify quantity in tons';
+        if (!value || isNaN(value)) return `Please specify quantity in ${form.unit.toLowerCase()}s`;
         const q = parseFloat(value);
-        if (q <= 0) return 'Quantity must be greater than 0 tons';
-        if (q > 500) return 'For bulk quantities above 500 tons, please contact dispatch office directly';
+        if (q <= 0) return `Quantity must be greater than 0`;
+        if (q > 500) return `For bulk quantities above 500 ${form.unit.toLowerCase()}s, please contact dispatch office directly`;
         return '';
 
       case 'preferred_date':
@@ -185,19 +193,32 @@ export default function DeliveryModal({
         }
         return '';
 
-      case 'address':
-        if (!value || !value.trim()) return 'Site delivery address in Puducherry is required';
-        if (value.trim().length < 8) return 'Please provide full site address (at least 8 characters with landmark/area)';
+      case 'address': {
+        const hasOtherLink = Boolean(form.location_link && form.location_link.trim());
+        if (hasOtherLink) return ''; // location link already provided, address is optional
+        if (!value || !value.trim()) return 'Please provide either Site Address or Google Maps Link';
+        if (value.trim().length < 4) return 'Please provide at least 4 characters for area/street landmark';
         return '';
+      }
 
-      case 'location_link':
-        if (value && value.trim()) {
-          const val = value.trim();
-          if (!/^https?:\/\//i.test(val)) {
-            return 'Link must start with http:// or https:// (e.g. https://maps.app.goo.gl/...)';
+      case 'location_link': {
+        const hasOtherAddress = Boolean(form.address && form.address.trim());
+        if (hasOtherAddress) {
+          if (value && value.trim()) {
+            const val = value.trim();
+            if (!/^https?:\/\//i.test(val) && !val.includes('maps') && !val.includes('goo.gl')) {
+              return 'Link must start with http:// or https:// (e.g. https://maps.app.goo.gl/...)';
+            }
           }
+          return ''; // address already provided, link is optional
+        }
+        if (!value || !value.trim()) return 'Please provide either Google Maps Link or Site Address';
+        const val = value.trim();
+        if (!/^https?:\/\//i.test(val) && !val.includes('maps') && !val.includes('goo.gl')) {
+          return 'Link must start with http:// or https:// (e.g. https://maps.app.goo.gl/...)';
         }
         return '';
+      }
 
       default:
         return '';
@@ -206,12 +227,24 @@ export default function DeliveryModal({
 
   const validateAll = () => {
     const newErrors = {};
-    const fieldsToValidate = ['name', 'mobile', 'email', 'material', 'quantity', 'preferred_date', 'address', 'location_link'];
-    
-    fieldsToValidate.forEach(field => {
+    const hasAddress = Boolean(form.address && form.address.trim().length >= 4);
+    const hasLink = Boolean(form.location_link && form.location_link.trim().length > 0);
+
+    const baseFields = ['name', 'mobile', 'email', 'material', 'quantity', 'preferred_date'];
+    baseFields.forEach(field => {
       const err = validateField(field, form[field]);
       if (err) newErrors[field] = err;
     });
+
+    if (!hasAddress && !hasLink) {
+      newErrors.address = 'Please provide either Site Delivery Address or Google Maps Pin link';
+    } else if (hasLink && !hasAddress) {
+      const linkErr = validateField('location_link', form.location_link);
+      if (linkErr) newErrors.location_link = linkErr;
+    } else if (hasAddress && hasLink) {
+      const linkErr = validateField('location_link', form.location_link);
+      if (linkErr) newErrors.location_link = linkErr;
+    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -225,7 +258,17 @@ export default function DeliveryModal({
 
   const handleChange = (field, val) => {
     setForm(prev => ({ ...prev, [field]: val }));
-    if (touched[field]) {
+
+    // Automatically clear cross-field errors when either address or maps link is entered
+    if (field === 'address') {
+      if (val && val.trim().length >= 4) {
+        setErrors(prev => ({ ...prev, address: '', location_link: '' }));
+      }
+    } else if (field === 'location_link') {
+      if (val && val.trim().length > 0) {
+        setErrors(prev => ({ ...prev, address: '', location_link: '' }));
+      }
+    } else if (touched[field]) {
       const err = validateField(field, val);
       setErrors(prev => ({ ...prev, [field]: err }));
     }
@@ -284,16 +327,24 @@ export default function DeliveryModal({
       setLoading(true);
       const cleanMobile = form.mobile.replace(/[\s\-\+]/g, '').replace(/^91/, '');
 
-      const fullAddress = form.location_link 
-        ? `${form.address.trim()}\n📍 Google Maps: ${form.location_link.trim()}`
-        : form.address.trim();
+      const trimmedAddr = (form.address || '').trim();
+      const trimmedLink = (form.location_link || '').trim();
+      let fullAddress = '';
+
+      if (trimmedAddr && trimmedLink) {
+        fullAddress = `${trimmedAddr}\n📍 Google Maps: ${trimmedLink}`;
+      } else if (trimmedAddr) {
+        fullAddress = trimmedAddr;
+      } else if (trimmedLink) {
+        fullAddress = `📍 Google Maps Pin: ${trimmedLink}`;
+      }
 
       const combinedNotes = [
         form.preferred_time_slot ? `Slot: ${form.preferred_time_slot}` : null,
         form.notes ? `Vehicle: ${form.notes}` : null,
-        `Original Rate: ₹${unitPricePerTon.toLocaleString('en-IN')}/Ton`,
+        `Original Rate: ₹${activeRate.toLocaleString('en-IN')}/${form.unit}`,
         `Est. Total: ₹${estimatedSubtotal.toLocaleString('en-IN')}`,
-        form.location_link ? `Maps Link: ${form.location_link}` : null
+        trimmedLink ? `Maps Link: ${trimmedLink}` : null
       ].filter(Boolean).join(' | ');
 
       const formattedDateString = `${form.preferred_date} (${form.preferred_time_slot})`;
@@ -304,20 +355,31 @@ export default function DeliveryModal({
         customer_email: form.email ? form.email.trim() : '',
         material_name: form.material,
         quantity: numQuantity,
-        unit: 'Ton', // Always Ton
+        unit: form.unit, // Selected Unit or Ton
         delivery_address: fullAddress,
+        location_link: trimmedLink || undefined,
         preferred_date: formattedDateString,
         additional_notes: combinedNotes
       });
 
       setBookedDelivery({
-        ...res.delivery,
-        original_price_per_ton: unitPricePerTon,
+        ...(res.delivery || {}),
+        material_name: res.delivery?.material_name || form.material,
+        quantity: res.delivery?.quantity || numQuantity,
+        unit: res.delivery?.unit || form.unit,
+        customer_name: res.delivery?.customer_name || form.name.trim(),
+        customer_mobile: res.delivery?.customer_mobile || cleanMobile,
+        delivery_address: res.delivery?.delivery_address || fullAddress,
+        preferred_date: res.delivery?.preferred_date || formattedDateString,
+        original_price_rate: activeRate,
         estimated_total: estimatedSubtotal,
         preferred_date_raw: form.preferred_date,
         preferred_time_slot: form.preferred_time_slot,
         location_link: form.location_link
       });
+
+      // Notify any listening components / dashboards to refresh immediately
+      window.dispatchEvent(new CustomEvent('delivery_booked', { detail: res.delivery }));
 
       confetti({
         particleCount: 90,
@@ -510,11 +572,11 @@ export default function DeliveryModal({
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
                 <span style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Material & Quantity:</span>
-                <span style={{ color: '#fff', fontWeight: 700 }}>{bookedDelivery.quantity} Ton(s) of {bookedDelivery.material_name}</span>
+                <span style={{ color: '#fff', fontWeight: 700 }}>{bookedDelivery.quantity} {bookedDelivery.unit || form.unit}(s) of {bookedDelivery.material_name}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
                 <span style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Original Rate:</span>
-                <span style={{ color: '#fbbf24', fontWeight: 700 }}>₹{bookedDelivery.original_price_per_ton?.toLocaleString('en-IN')} / Ton</span>
+                <span style={{ color: '#fbbf24', fontWeight: 700 }}>₹{(bookedDelivery.original_price_rate || activeRate)?.toLocaleString('en-IN')} / {bookedDelivery.unit || form.unit}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
                 <span style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Est. Material Subtotal:</span>
@@ -652,20 +714,21 @@ export default function DeliveryModal({
               )}
             </div>
 
-            {/* Row 3: Material, Quantity in Ton, and Unit (Ton ONLY) */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-              <div className="form-group" style={{ marginBottom: 0 }}>
+            {/* Row 3: Material, Quantity, and Unit Switcher (Responsive Grid) */}
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', 
+              gap: '0.75rem', 
+              marginBottom: '0.75rem' 
+            }}>
+              <div className="form-group" style={{ marginBottom: 0, gridColumn: 'span 2' }}>
                 <label className="form-label">
                   Material <span style={{ color: '#ef4444' }}>*</span>
                 </label>
                 <select
                   className="form-control"
                   value={form.material}
-                  onChange={(e) => {
-                    const selectedName = e.target.value;
-                    handleChange('material', selectedName);
-                    handleChange('unit', 'Ton');
-                  }}
+                  onChange={(e) => handleChange('material', e.target.value)}
                   onBlur={() => handleBlur('material')}
                 >
                   {availableMaterials.map((m) => (
@@ -683,13 +746,13 @@ export default function DeliveryModal({
 
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label">
-                  Quantity (Tons) <span style={{ color: '#ef4444' }}>*</span>
+                  Quantity ({form.unit}s) <span style={{ color: '#ef4444' }}>*</span>
                 </label>
                 <input
                   type="number"
                   min="0.5"
                   step="any"
-                  placeholder="e.g. 3"
+                  placeholder="e.g. 1"
                   className={`form-control ${errors.quantity && touched.quantity ? 'input-error' : ''}`}
                   value={form.quantity}
                   onChange={(e) => handleChange('quantity', e.target.value)}
@@ -706,34 +769,36 @@ export default function DeliveryModal({
                 )}
               </div>
 
-              {/* UNIT FIELD: RESTRICTED TO TON ONLY */}
+              {/* UNIT FIELD: USER CAN SWITCH TON OR UNIT */}
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label">Unit</label>
                 <select
                   className="form-control"
-                  value="Ton"
-                  onChange={() => handleChange('unit', 'Ton')}
+                  value={form.unit}
+                  onChange={(e) => handleChange('unit', e.target.value)}
                   style={{
                     fontWeight: 700,
-                    color: '#38bdf8',
-                    background: 'rgba(15, 23, 42, 0.95)'
+                    color: form.unit === 'Ton' ? '#fb923c' : '#38bdf8',
+                    background: 'rgba(15, 23, 42, 0.95)',
+                    cursor: 'pointer'
                   }}
                 >
+                  <option value="Unit">Unit</option>
                   <option value="Ton">Ton</option>
                 </select>
               </div>
             </div>
 
-            {/* Quick Ton Quantity Select Buttons */}
+            {/* Quick Quantity Select Buttons (Dynamic for Unit / Ton) */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '1.1rem', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600 }}>Quick Tons:</span>
+              <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600 }}>Quick {form.unit}s:</span>
               {[1, 2, 3, 5, 10, 20].map(qty => (
                 <button
                   key={qty}
                   type="button"
                   onClick={() => handleChange('quantity', qty.toString())}
                   style={{
-                    padding: '0.2rem 0.65rem',
+                    padding: '0.22rem 0.65rem',
                     borderRadius: '6px',
                     fontSize: '0.74rem',
                     fontWeight: 700,
@@ -744,12 +809,12 @@ export default function DeliveryModal({
                     transition: 'all 0.2s'
                   }}
                 >
-                  {qty} Ton{qty > 1 ? 's' : ''}
+                  {qty} {form.unit}{qty > 1 ? 's' : ''}
                 </button>
               ))}
             </div>
 
-            {/* LIVE ORIGINAL PRICE & ESTIMATE CARD (PER TON) */}
+            {/* LIVE PRICE & ESTIMATE CARD (PER UNIT / TON) */}
             <div style={{
               background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.9))',
               border: '1px solid rgba(59, 130, 246, 0.3)',
@@ -762,7 +827,7 @@ export default function DeliveryModal({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
                   <Coins size={16} color="#fbbf24" />
                   <span style={{ fontSize: '0.82rem', color: '#cbd5e1', fontWeight: 700 }}>
-                    Original Depot Rate (Per Ton):
+                    {form.unit === 'Ton' ? 'Original Depot Rate (Per Ton):' : 'Original Depot Rate (Per Unit):'}
                   </span>
                 </div>
                 <div style={{
@@ -774,17 +839,17 @@ export default function DeliveryModal({
                   borderRadius: '6px',
                   border: '1px solid rgba(245, 158, 11, 0.3)'
                 }}>
-                  ₹{unitPricePerTon.toLocaleString('en-IN')} <span style={{ fontSize: '0.72rem', color: '#fde68a', fontWeight: 600 }}>/ Ton</span>
+                  ₹{activeRate.toLocaleString('en-IN')} <span style={{ fontSize: '0.72rem', color: '#fde68a', fontWeight: 600 }}>/ {form.unit}</span>
                 </div>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.45rem', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
                 <div>
                   <div style={{ fontSize: '0.76rem', color: '#94a3b8' }}>
-                    {numQuantity} Ton(s) × ₹{unitPricePerTon.toLocaleString('en-IN')}
+                    {numQuantity} {form.unit}(s) × ₹{activeRate.toLocaleString('en-IN')}
                   </div>
                   <div style={{ fontSize: '0.72rem', color: '#10b981', fontWeight: 600 }}>
-                    ✓ Computerized Weighbridge Slip Included
+                    {form.unit === 'Ton' ? '✓ Computerized Weighbridge Slip Included' : '✓ Standard Puducherry Yard Measurement Guaranteed'}
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
@@ -903,17 +968,38 @@ export default function DeliveryModal({
               </div>
             </div>
 
+            {/* Row 5 & 6 Note: Single required field rule */}
+            <div style={{
+              background: 'rgba(56, 189, 248, 0.06)',
+              border: '1px solid rgba(56, 189, 248, 0.18)',
+              borderRadius: '10px',
+              padding: '0.65rem 0.9rem',
+              marginBottom: '1rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              fontSize: '0.78rem',
+              color: '#93c5fd'
+            }}>
+              <MapPin size={16} color="#38bdf8" style={{ flexShrink: 0 }} />
+              <span>
+                <strong>Site Location:</strong> Enter <strong>either</strong> your Site Address <em>OR</em> Google Maps Link below — only one is required for dispatch.
+              </span>
+            </div>
+
             {/* Row 5: Customer Address Field */}
             <div className="form-group" style={{ marginBottom: '1rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', flexWrap: 'wrap', gap: '0.3rem' }}>
                 <label className="form-label" style={{ marginBottom: 0 }}>
-                  Exact Site Delivery Address in Puducherry <span style={{ color: '#ef4444' }}>*</span>
+                  Exact Site Delivery Address in Puducherry {(!form.location_link || !form.location_link.trim()) && <span style={{ color: '#ef4444' }}>*</span>}
                 </label>
-                <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Area / Landmark required</span>
+                <span style={{ fontSize: '0.72rem', color: (form.location_link && form.location_link.trim()) ? '#34d399' : '#94a3b8', fontWeight: 600 }}>
+                  {(form.location_link && form.location_link.trim()) ? '✓ Optional (Google Maps Link provided)' : '(Required unless Maps Pin given)'}
+                </span>
               </div>
               <textarea
                 rows="2"
-                placeholder="Plot no / Door no, Street name, Landmark, Village or Area (e.g. Kalathumettu St, Thilaspettai / Lawspet / Villianur)"
+                placeholder={(form.location_link && form.location_link.trim()) ? "Optional extra landmark, door number or street details..." : "Plot no / Door no, Street name, Landmark, Village or Area (e.g. Kalathumettu St, Thilaspettai / Lawspet / Villianur)"}
                 className={`form-control ${errors.address && touched.address ? 'input-error' : ''}`}
                 value={form.address}
                 onChange={(e) => handleChange('address', e.target.value)}
@@ -935,8 +1021,10 @@ export default function DeliveryModal({
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                 <label className="form-label" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                   <MapPin size={15} color="#38bdf8" />
-                  <span>Site Location Link (Google Maps Pin)</span>
-                  <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 500 }}>(Optional)</span>
+                  <span>Site Location Link (Google Maps Pin) {(!form.address || !form.address.trim()) && <span style={{ color: '#ef4444' }}>*</span>}</span>
+                  <span style={{ fontSize: '0.72rem', color: (form.address && form.address.trim().length >= 4) ? '#34d399' : '#94a3b8', fontWeight: 600 }}>
+                    {(form.address && form.address.trim().length >= 4) ? '✓ Optional (Address provided above)' : '(Required unless Address given)'}
+                  </span>
                 </label>
 
                 {/* GPS Current Location Button */}
@@ -967,7 +1055,7 @@ export default function DeliveryModal({
 
               <input
                 type="url"
-                placeholder="Paste Google Maps link (e.g. https://maps.app.goo.gl/... or google.com/maps?q=...)"
+                placeholder={(form.address && form.address.trim().length >= 4) ? "Optional: Paste Google Maps pin link (e.g. https://maps.app.goo.gl/...)" : "Paste Google Maps pin link (e.g. https://maps.app.goo.gl/...)"}
                 className={`form-control ${errors.location_link && touched.location_link ? 'input-error' : ''}`}
                 value={form.location_link}
                 onChange={(e) => {

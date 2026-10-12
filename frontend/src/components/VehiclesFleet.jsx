@@ -16,7 +16,7 @@ export default function VehiclesFleet({ settings, onOpenDelivery, onOpenQuote })
 
   // Interactive Quick Delivery Estimator
   const [estMaterial, setEstMaterial] = useState('M-Sand');
-  const [estQuantity, setEstQuantity] = useState(2);
+  const [estQuantity, setEstQuantity] = useState('1'); // stored as string to allow free editing/clearing
   const [estDistance, setEstDistance] = useState(5); // km from Thilaspettai
 
   // Rough estimation logic: Base material * qty + (distance * 120 per km)
@@ -30,8 +30,9 @@ export default function VehiclesFleet({ settings, onOpenDelivery, onOpenQuote })
     'Gravel': 2800
   };
 
-  const estimatedMaterialCost = (baseRates[estMaterial] || 4500) * estQuantity;
-  const estimatedTransportCost = Math.max(500, estDistance * 100 * estQuantity);
+  const parsedQty = Math.max(0.5, parseFloat(estQuantity) || 1);
+  const estimatedMaterialCost = (baseRates[estMaterial] || 4500) * parsedQty;
+  const estimatedTransportCost = Math.max(500, estDistance * 100 * parsedQty);
   const totalEstimate = estimatedMaterialCost + estimatedTransportCost;
 
   const fleetVehicles = [
@@ -271,14 +272,22 @@ export default function VehiclesFleet({ settings, onOpenDelivery, onOpenQuote })
               </div>
 
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Quantity (Loads)</label>
+                <label className="form-label">Quantity (Units)</label>
                 <input 
                   type="number"
-                  min="1"
-                  max="20"
+                  min="0.5"
+                  step="any"
+                  placeholder="e.g. 1"
                   className="form-control"
                   value={estQuantity}
-                  onChange={(e) => setEstQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                  onChange={(e) => setEstQuantity(e.target.value)}
+                  onBlur={(e) => {
+                    // On blur: if empty or invalid, reset to 1
+                    const val = parseFloat(e.target.value);
+                    if (!e.target.value || isNaN(val) || val < 0.5) {
+                      setEstQuantity('1');
+                    }
+                  }}
                 />
               </div>
             </div>
@@ -312,7 +321,7 @@ export default function VehiclesFleet({ settings, onOpenDelivery, onOpenQuote })
               marginBottom: '1.4rem'
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.86rem', color: '#cbd5e1', marginBottom: '0.45rem' }}>
-                <span>Material Cost ({estQuantity} Loads {estMaterial}):</span>
+                <span>Material Cost ({estQuantity || 1} Units {estMaterial}):</span>
                 <span>₹{estimatedMaterialCost.toLocaleString('en-IN')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.86rem', color: '#cbd5e1', marginBottom: '0.65rem' }}>

@@ -6,7 +6,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'sri_angalamman_secure_jwt_secret_2
 function authenticate(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Authentication token required' });
+    return res.status(401).json({ error: 'Please log in to your account before proceeding.' });
   }
 
   const token = authHeader.split(' ')[1];

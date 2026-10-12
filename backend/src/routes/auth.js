@@ -83,7 +83,8 @@ router.post('/google', async (req, res) => {
     const SUPER_ADMIN_EMAILS = [
       'angalammanbluemetalspondy@gmail.com',
       'sriangalammanbluemetalspondy@gmail.com',
-      'admin@angalamman.com'
+      'admin@angalamman.com',
+      'tharanishvaranr@gmail.com'
     ];
 
     // If it's one of the designated super admin emails, guarantee record exists in admins
@@ -100,9 +101,17 @@ router.post('/google', async (req, res) => {
         db.prepare(`UPDATE admins SET role = 'SUPER_ADMIN', status = 'ACTIVE' WHERE id = ?`).run(existingAdmin.id);
       }
 
-      // Remove from users to eliminate customer collision
+      // Sync role in users table so admin is visible in Customer/User directory
       try {
-        db.prepare('DELETE FROM users WHERE LOWER(email) = ?').run(cleanEmail);
+        const userExists = db.prepare('SELECT id FROM users WHERE LOWER(email) = ?').get(cleanEmail);
+        if (userExists) {
+          db.prepare(`UPDATE users SET role = 'SUPER_ADMIN', status = 'ACTIVE', last_login = CURRENT_TIMESTAMP WHERE id = ?`).run(userExists.id);
+        } else {
+          db.prepare(`
+            INSERT INTO users (google_id, name, email, profile_image, role, login_count, first_login, last_login, status)
+            VALUES (?, ?, ?, ?, 'SUPER_ADMIN', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'ACTIVE')
+          `).run(googleId, name, cleanEmail, picture || null);
+        }
       } catch (e) {}
     }
 
@@ -120,6 +129,18 @@ router.post('/google', async (req, res) => {
             last_login = CURRENT_TIMESTAMP
         WHERE id = ?
       `).run(picture || null, name || null, admin.id);
+
+      // Keep user record in sync
+      try {
+        db.prepare(`
+          UPDATE users
+          SET last_login = CURRENT_TIMESTAMP,
+              login_count = COALESCE(login_count, 0) + 1,
+              profile_image = COALESCE(?, profile_image),
+              name = COALESCE(?, name)
+          WHERE LOWER(email) = ?
+        `).run(picture || null, name || null, cleanEmail);
+      } catch (e) {}
 
       db.prepare(`
         INSERT INTO login_history (admin_id, role, ip_address, user_agent)

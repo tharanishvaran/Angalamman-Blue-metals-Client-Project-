@@ -35,13 +35,18 @@ import {
   Lock,
   Key,
   Shield,
-  Smartphone
+  Smartphone,
+  MapPin,
+  Calendar,
+  Menu,
+  X as CloseIcon
 } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
 import { api } from '../api';
 
 export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, onDataUpdated }) {
   const [activeSection, setActiveSection] = useState('dashboard');
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [dashboardData, setDashboardData] = useState(null);
   const [materials, setMaterials] = useState([]);
   const [services, setServices] = useState([]);
@@ -66,11 +71,16 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
     customer_email: '',
     customer_address: '',
     discount: 0,
+    paid_amount: 0,
     payment_status: 'Unpaid',
     notes: '',
-    items: [{ material_name: 'M-Sand', quantity: 1, unit: 'Load', unit_price: 4800 }]
+    items: [] // No default item: admin chooses dynamically
   });
   const [billingSuccess, setBillingSuccess] = useState('');
+  const [invoiceSubTab, setInvoiceSubTab] = useState('all'); // 'all', 'partial', 'paid'
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [paymentModalInvoice, setPaymentModalInvoice] = useState(null);
+  const [paymentModalPaidAmount, setPaymentModalPaidAmount] = useState('');
 
   // Admin User Creation & Edit Modals State
   const [adminModalOpen, setAdminModalOpen] = useState(false);
@@ -81,7 +91,7 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
   const [adminRoleFilter, setAdminRoleFilter] = useState('All');
 
   // Customer Directory & Logged-in Customer Tracker State
-  const [customerFilterTab, setCustomerFilterTab] = useState('logged_in'); // 'logged_in', 'all', 'google', 'email'
+  const [customerFilterTab, setCustomerFilterTab] = useState('all'); // Default to 'all' so every user is visible
   const [customerSearch, setCustomerSearch] = useState('');
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
   const [selectedCustomerDetail, setSelectedCustomerDetail] = useState(null);
@@ -102,51 +112,67 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
     loadAllAdminData();
   }, [activeSection]);
 
-  const loadAllAdminData = async () => {
+  // Real-time automatic polling and delivery_booked event listener
+  useEffect(() => {
+    const handleDeliveryBooked = () => {
+      loadAllAdminData(false);
+    };
+    window.addEventListener('delivery_booked', handleDeliveryBooked);
+
+    const timer = setInterval(() => {
+      loadAllAdminData(false);
+    }, 12000);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('delivery_booked', handleDeliveryBooked);
+    };
+  }, [activeSection]);
+
+  const loadAllAdminData = async (showLoadingSpinner = true) => {
     try {
-      setLoading(true);
+      if (showLoadingSpinner) setLoading(true);
       if (activeSection === 'dashboard') {
         const data = await api.getDashboardStats();
         setDashboardData(data);
       } else if (activeSection === 'materials') {
         const mats = await api.getMaterials({ all: 'true' });
-        setMaterials(mats);
+        setMaterials(Array.isArray(mats) ? mats : []);
       } else if (activeSection === 'services') {
         const srvs = await api.getServices({ all: 'true' });
-        setServices(srvs);
+        setServices(Array.isArray(srvs) ? srvs : []);
       } else if (activeSection === 'deliveries') {
         const dels = await api.getAdminDeliveries();
-        setDeliveries(dels);
+        setDeliveries(Array.isArray(dels) ? dels : []);
       } else if (activeSection === 'quotes') {
         const qts = await api.getAdminQuotes();
-        setQuotes(qts);
+        setQuotes(Array.isArray(qts) ? qts : []);
       } else if (activeSection === 'invoices') {
         const [invs, custs, mats] = await Promise.all([
           api.getAdminInvoices(),
           api.getCustomers().catch(() => []),
           api.getMaterials({ all: 'true' }).catch(() => [])
         ]);
-        setInvoices(invs);
-        setCustomers(custs);
-        setMaterials(mats);
+        setInvoices(Array.isArray(invs) ? invs : []);
+        setCustomers(Array.isArray(custs) ? custs : []);
+        setMaterials(Array.isArray(mats) ? mats : []);
       } else if (activeSection === 'customers') {
         const custs = await api.getCustomers();
-        setCustomers(custs);
+        setCustomers(Array.isArray(custs) ? custs : []);
       } else if (activeSection === 'admins') {
         const admins = await api.getAdmins();
-        setAdminUsers(admins);
+        setAdminUsers(Array.isArray(admins) ? admins : []);
       } else if (activeSection === 'reviews') {
         const revs = await api.getAdminReviews();
-        setReviews(revs);
+        setReviews(Array.isArray(revs) ? revs : []);
       } else if (activeSection === 'settings' || activeSection === 'media') {
         const sets = await api.getSettings();
-        setSiteSettings(sets);
-        setSettingsForm(sets);
+        setSiteSettings(sets || {});
+        setSettingsForm(sets || {});
       }
     } catch (err) {
       console.error('Failed to load admin data:', err);
     } finally {
-      setLoading(false);
+      if (showLoadingSpinner) setLoading(false);
     }
   };
 
@@ -198,6 +224,91 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
     }
   };
 
+  // Robust Material Matcher (matches exact, partial, or measurement fractions like 3/4, 20mm, M-Sand)
+  const findMaterialMatch = (matName, matList = []) => {
+    if (!matName || !matList || !matList.length) return null;
+    const clean = matName.trim().toLowerCase();
+    
+    // 1. Exact match
+    let found = matList.find(m => m.name.toLowerCase() === clean);
+    if (found) return found;
+
+    // 2. Mutual inclusion
+    found = matList.find(m => {
+      const mLow = m.name.toLowerCase();
+      return clean.includes(mLow) || mLow.includes(clean);
+    });
+    if (found) return found;
+
+    // 3. Size fraction / type token matching
+    const fractions = ['3/4', '1/4', '1/2', '1 1/2', '20mm', '6mm', '12mm', '40mm', 'm-sand', 'p-sand', 'river', 'gravel', 'kraval', 'crusher', 'sengal', 'brick'];
+    for (const frac of fractions) {
+      if (clean.includes(frac)) {
+        found = matList.find(m => m.name.toLowerCase().includes(frac));
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  // One-click conversion from Site Delivery to Invoice
+  const handleBillDelivery = (del) => {
+    const matchedMat = findMaterialMatch(del.material_name, materials);
+    const unitPrice = matchedMat ? matchedMat.price : (parseFloat(del.price) || 0);
+    const qty = parseFloat(del.quantity) || 1;
+    const matName = matchedMat ? matchedMat.name : (del.material_name || '');
+    const unitName = del.unit || (matchedMat ? matchedMat.unit : 'Unit');
+
+    setBillingForm({
+      user_id: del.user_id || '',
+      customer_name: del.customer_name || '',
+      customer_mobile: del.customer_mobile || '',
+      customer_email: del.customer_email || '',
+      customer_address: del.delivery_address?.split('\n')[0] || del.delivery_address || '',
+      discount: 0,
+      paid_amount: 0,
+      payment_status: 'Unpaid',
+      notes: `Site Delivery Order #${del.request_number}`,
+      items: [{
+        material_name: matName,
+        quantity: qty,
+        unit: unitName,
+        unit_price: unitPrice
+      }]
+    });
+    setActiveSection('invoices');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // One-click conversion from Quotation to Invoice
+  const handleBillQuote = (q) => {
+    const matchedMat = findMaterialMatch(q.material_name, materials);
+    const unitPrice = matchedMat ? matchedMat.price : (parseFloat(q.price) || 0);
+    const qty = parseFloat(q.quantity) || 1;
+    const matName = matchedMat ? matchedMat.name : (q.material_name || '');
+    const unitName = q.unit || (matchedMat ? matchedMat.unit : 'Unit');
+
+    setBillingForm({
+      user_id: q.user_id || '',
+      customer_name: q.customer_name || '',
+      customer_mobile: q.customer_mobile || '',
+      customer_email: q.customer_email || '',
+      customer_address: q.delivery_location?.split('\n')[0] || q.delivery_location || '',
+      discount: 0,
+      paid_amount: 0,
+      payment_status: 'Unpaid',
+      notes: `Quotation Request #${q.request_number}`,
+      items: [{
+        material_name: matName,
+        quantity: qty,
+        unit: unitName,
+        unit_price: unitPrice
+      }]
+    });
+    setActiveSection('invoices');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   // Section 41: Auto-fill customer details when selected in Billing
   const handleSelectCustomerForBilling = (userId) => {
     const cust = customers.find(c => c.id.toString() === userId.toString());
@@ -217,10 +328,9 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
 
   // Billing Line Items Helpers
   const handleAddBillingItem = () => {
-    const defaultMat = materials[0] || { name: 'M-Sand', price: 4800, unit: 'Load' };
     setBillingForm(prev => ({
       ...prev,
-      items: [...prev.items, { material_name: defaultMat.name, quantity: 1, unit: defaultMat.unit || 'Load', unit_price: defaultMat.price || 4800 }]
+      items: [...prev.items, { material_name: '', quantity: 1, unit: 'Unit', unit_price: '' }]
     }));
   };
 
@@ -236,12 +346,12 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
       const newItems = [...prev.items];
       newItems[idx] = { ...newItems[idx], [field]: value };
 
-      // When material changed, auto populate unit and price
-      if (field === 'material_name') {
+      // When material changed, auto populate unit and price if matched from catalog
+      if (field === 'material_name' && value && value !== '__custom__') {
         const matched = materials.find(m => m.name === value);
         if (matched) {
           newItems[idx].unit_price = matched.price;
-          newItems[idx].unit = matched.unit;
+          newItems[idx].unit = matched.unit || 'Unit';
         }
       }
       return { ...prev, items: newItems };
@@ -254,20 +364,89 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
   };
   const billingSubtotal = calculateBillingSubtotal();
   const billingGrandTotal = Math.max(0, billingSubtotal - (parseFloat(billingForm.discount) || 0));
+  const billingPaidAmount = Math.max(0, parseFloat(billingForm.paid_amount) || 0);
+  const billingBalanceDue = Math.max(0, billingGrandTotal - billingPaidAmount);
+
+  // Invoices filtered by payment status (Partially Paid includes 0 paid, Fully Paid)
+  const partiallyPaidInvoices = invoices.filter(inv => {
+    const paid = inv.paid_amount != null ? Number(inv.paid_amount) : (inv.payment_status === 'Paid' ? inv.grand_total : 0);
+    return paid < inv.grand_total || inv.payment_status === 'Partial' || inv.payment_status === 'Unpaid';
+  });
+
+  const fullyPaidInvoices = invoices.filter(inv => {
+    const paid = inv.paid_amount != null ? Number(inv.paid_amount) : (inv.payment_status === 'Paid' ? inv.grand_total : 0);
+    return (paid >= inv.grand_total && inv.grand_total > 0) || (inv.payment_status === 'Paid' && paid >= inv.grand_total);
+  });
+
+  const filteredInvoices = invoiceSubTab === 'partial'
+    ? partiallyPaidInvoices
+    : invoiceSubTab === 'paid'
+      ? fullyPaidInvoices
+      : invoices;
+
+  const totalOutstandingBalance = partiallyPaidInvoices.reduce((sum, inv) => {
+    const paid = inv.paid_amount != null ? Number(inv.paid_amount) : (inv.payment_status === 'Paid' ? inv.grand_total : 0);
+    return sum + Math.max(0, inv.grand_total - paid);
+  }, 0);
 
   const handleCreateInvoice = async (e) => {
     e.preventDefault();
+    if (!billingForm.items.length) {
+      alert('Please add at least one material to the invoice.');
+      return;
+    }
+    const hasEmptyItem = billingForm.items.some(it => !it.material_name || !it.material_name.trim());
+    if (hasEmptyItem) {
+      alert('Please select or enter a material name for all items.');
+      return;
+    }
     try {
+      const paidVal = Math.max(0, parseFloat(billingForm.paid_amount) || 0);
       const res = await api.createInvoice({
         ...billingForm,
-        discount: parseFloat(billingForm.discount) || 0
+        discount: parseFloat(billingForm.discount) || 0,
+        paid_amount: paidVal,
+        payment_status: paidVal >= billingGrandTotal && billingGrandTotal > 0 ? 'Paid' : 'Partial'
       });
-      setBillingSuccess(`Invoice ${res.invoice.invoice_number} created successfully!`);
+      setBillingSuccess(`Invoice ${res.invoice.invoice_number} generated successfully!`);
       loadAllAdminData();
       if (onViewInvoice) onViewInvoice(res.invoice);
       setTimeout(() => setBillingSuccess(''), 4000);
+      setBillingForm({
+        user_id: '',
+        customer_name: '',
+        customer_mobile: '',
+        customer_email: '',
+        customer_address: '',
+        discount: 0,
+        paid_amount: 0,
+        payment_status: 'Unpaid',
+        notes: '',
+        items: []
+      });
     } catch (err) {
       alert(err.message || 'Invoice generation failed');
+    }
+  };
+
+  const handleOpenPaymentModal = (inv) => {
+    setPaymentModalInvoice(inv);
+    setPaymentModalPaidAmount(inv.paid_amount != null ? inv.paid_amount : (inv.payment_status === 'Paid' ? inv.grand_total : 0));
+    setPaymentModalOpen(true);
+  };
+
+  const handleSavePaymentModal = async (e) => {
+    e.preventDefault();
+    if (!paymentModalInvoice) return;
+    try {
+      const paidVal = Math.max(0, parseFloat(paymentModalPaidAmount) || 0);
+      const newStatus = paidVal >= paymentModalInvoice.grand_total && paymentModalInvoice.grand_total > 0 ? 'Paid' : 'Partial';
+      await api.updateInvoicePaymentStatus(paymentModalInvoice.id, newStatus, paidVal);
+      setPaymentModalOpen(false);
+      setPaymentModalInvoice(null);
+      loadAllAdminData();
+    } catch (err) {
+      alert(err.message || 'Failed to update payment');
     }
   };
 
@@ -307,8 +486,8 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
     loadAllAdminData();
   };
 
-  const handleUpdateInvoicePayment = async (id, payment_status) => {
-    await api.updateInvoicePaymentStatus(id, payment_status);
+  const handleUpdateInvoicePayment = async (id, payment_status, paid_amount) => {
+    await api.updateInvoicePaymentStatus(id, payment_status, paid_amount);
     loadAllAdminData();
   };
 
@@ -328,17 +507,27 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
   return (
     <div style={{ display: 'flex', minHeight: '100vh', width: '100%', background: '#070e1b', color: '#f8fafc', position: 'relative', zIndex: 10 }}>
       
+      {/* Mobile Drawer Backdrop */}
+      {mobileSidebarOpen && (
+        <div 
+          onClick={() => setMobileSidebarOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 1100
+          }}
+          className="admin-backdrop"
+        />
+      )}
+
       {/* Sidebar */}
-      <aside style={{
-        width: '260px',
-        background: '#0a1224',
-        borderRight: '1px solid rgba(255, 255, 255, 0.08)',
-        display: 'flex',
-        flexDirection: 'column',
-        flexShrink: 0
-      }}>
+      <aside 
+        className={`admin-portal-sidebar ${mobileSidebarOpen ? 'mobile-open' : ''}`}
+      >
         {/* Sidebar Brand */}
-        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
+        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <BrandLogo size={38} showRing={true} showAura={true} showShine={true} />
             <div>
@@ -346,25 +535,37 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
               <div style={{ fontSize: '0.68rem', color: '#fb923c', fontWeight: 800, letterSpacing: '0.06em' }}>ADMIN PORTAL</div>
             </div>
           </div>
+          {mobileSidebarOpen && (
+            <button
+              onClick={() => setMobileSidebarOpen(false)}
+              style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '0.2rem' }}
+              aria-label="Close Sidebar"
+            >
+              <CloseIcon size={20} />
+            </button>
+          )}
         </div>
 
         {/* Sidebar Nav Items */}
         <nav style={{ flex: 1, padding: '1rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
           {[
             { id: 'dashboard', label: 'Executive Dashboard', icon: <LayoutDashboard size={18} /> },
-            { id: 'materials', label: 'Materials Catalog', icon: <Layers size={18} /> },
-            { id: 'media', label: 'Website Pictures', icon: <ImageIcon size={18} /> },
             { id: 'deliveries', label: 'Site Deliveries', icon: <Truck size={18} /> },
+            { id: 'materials', label: 'Materials Catalog', icon: <Layers size={18} /> },
             { id: 'quotes', label: 'Quotation Requests', icon: <FileText size={18} /> },
             { id: 'invoices', label: 'Billing & Invoices', icon: <Receipt size={18} /> },
             { id: 'customers', label: 'Customer Directory & Logins', icon: <Users size={18} /> },
-            { id: 'reviews', label: 'Reviews & Feedback', icon: <Star size={18} /> },
             { id: 'admins', label: 'Admin Users & Staff', icon: <ShieldCheck size={18} /> },
+            { id: 'media', label: 'Website Pictures', icon: <ImageIcon size={18} /> },
+            { id: 'reviews', label: 'Reviews & Feedback', icon: <Star size={18} /> },
             { id: 'settings', label: 'Business Settings', icon: <SettingsIcon size={18} /> },
           ].map((item) => (
             <button
               key={item.id}
-              onClick={() => setActiveSection(item.id)}
+              onClick={() => {
+                setActiveSection(item.id);
+                setMobileSidebarOpen(false);
+              }}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -405,8 +606,8 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
               </div>
             )}
             <div>
-              <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#fff' }}>{admin.name}</div>
-              <div style={{ fontSize: '0.72rem', color: '#38bdf8' }}>{admin.role}</div>
+              <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#fff' }}>{admin?.name}</div>
+              <div style={{ fontSize: '0.72rem', color: '#38bdf8' }}>{admin?.role}</div>
             </div>
           </div>
           <button
@@ -432,41 +633,58 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
       </aside>
 
       {/* Main Content Area */}
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', minWidth: 0 }}>
         
         {/* Top Header */}
-        <header style={{
+        <header className="admin-header" style={{
           height: '65px',
           borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-          background: 'rgba(10, 18, 36, 0.8)',
+          background: 'rgba(10, 18, 36, 0.95)',
           backdropFilter: 'blur(10px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '0 2rem',
+          padding: '0 1.25rem',
           position: 'sticky',
           top: 0,
           zIndex: 100
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <h2 style={{ fontSize: '1.25rem', color: '#fff', textTransform: 'capitalize' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <button
+              onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
+              className="btn btn-outline btn-sm admin-mobile-toggle"
+              style={{ padding: '0.4rem 0.65rem' }}
+              aria-label="Toggle Navigation Menu"
+            >
+              {mobileSidebarOpen ? <CloseIcon size={18} /> : <Menu size={18} />}
+            </button>
+            <h2 style={{ fontSize: '1.15rem', color: '#fff', textTransform: 'capitalize', margin: 0 }}>
               {activeSection.replace('-', ' ')}
             </h2>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <button
+              onClick={() => loadAllAdminData(true)}
+              className="btn btn-outline btn-sm"
+              style={{ fontSize: '0.78rem', padding: '0.35rem 0.65rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+              title="Refresh all admin data"
+            >
+              <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
+              <span className="hidden-mobile-sm">{loading ? 'Refreshing...' : 'Refresh'}</span>
+            </button>
             <button
               onClick={onClose}
               className="btn btn-outline btn-sm"
-              style={{ fontSize: '0.82rem' }}
+              style={{ fontSize: '0.78rem', padding: '0.35rem 0.65rem' }}
             >
-              <ExternalLink size={14} /> View Public Website
+              <ExternalLink size={13} /> <span className="hidden-mobile-sm">View Website</span>
             </button>
           </div>
         </header>
 
         {/* Content Body */}
-        <div style={{ padding: '2rem' }}>
+        <div className="admin-content-body" style={{ padding: '1.5rem' }}>
           
           {/* TAB 1: EXECUTIVE DASHBOARD */}
           {activeSection === 'dashboard' && dashboardData && (
@@ -496,20 +714,45 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
               </div>
 
               {/* Recent Dispatches & Quotes Table */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '1.5rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: '1.5rem' }}>
                 <div className="glass-card" style={{ padding: '1.5rem', borderRadius: '16px' }}>
-                  <h3 style={{ fontSize: '1.1rem', color: '#fff', marginBottom: '1rem' }}>Recent Site Orders</h3>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <h3 style={{ fontSize: '1.1rem', color: '#fff' }}>Recent Site Orders & Dispatches</h3>
+                    <button 
+                      onClick={() => setActiveSection('deliveries')} 
+                      className="btn btn-outline btn-sm"
+                      style={{ fontSize: '0.74rem', padding: '0.25rem 0.6rem' }}
+                    >
+                      View All
+                    </button>
+                  </div>
                   {dashboardData.recentOrders && dashboardData.recentOrders.length > 0 ? (
                     <div style={{ display: 'grid', gap: '0.75rem' }}>
                       {dashboardData.recentOrders.map(ord => (
-                        <div key={ord.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.6rem 0.75rem', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px', fontSize: '0.85rem' }}>
+                        <div key={`${ord.order_type || 'ord'}-${ord.id}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.65rem 0.85rem', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '10px', fontSize: '0.85rem' }}>
                           <div>
-                            <strong style={{ color: '#38bdf8' }}>{ord.order_number}</strong>
-                            <div style={{ color: '#94a3b8' }}>{ord.customer_name} ({ord.customer_mobile})</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <strong style={{ color: '#38bdf8' }}>{ord.order_number}</strong>
+                              <span style={{ fontSize: '0.7rem', padding: '1px 6px', borderRadius: '4px', background: ord.order_type === 'DELIVERY' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(16, 185, 129, 0.15)', color: ord.order_type === 'DELIVERY' ? '#38bdf8' : '#34d399', fontWeight: 600 }}>
+                                {ord.order_type === 'DELIVERY' ? 'Site Delivery' : 'Invoice'}
+                              </span>
+                            </div>
+                            <div style={{ color: '#94a3b8', marginTop: '2px' }}>
+                              {ord.customer_name} ({ord.customer_mobile})
+                            </div>
+                            {ord.material_name && (
+                              <div style={{ color: '#cbd5e1', fontSize: '0.78rem', marginTop: '2px' }}>
+                                📦 {ord.quantity} {ord.unit || 'Ton'} of {ord.material_name}
+                              </div>
+                            )}
                           </div>
                           <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontWeight: 700, color: '#fb923c' }}>₹{ord.final_amount.toLocaleString('en-IN')}</div>
-                            <span className="badge badge-blue">{ord.status}</span>
+                            {ord.final_amount != null ? (
+                              <div style={{ fontWeight: 700, color: '#fb923c', marginBottom: '2px' }}>₹{ord.final_amount.toLocaleString('en-IN')}</div>
+                            ) : null}
+                            <span className={`badge ${ord.status === 'Delivered' ? 'badge-green' : ord.status === 'Cancelled' ? 'badge-red' : 'badge-blue'}`}>
+                              {ord.status}
+                            </span>
                           </div>
                         </div>
                       ))}
@@ -520,17 +763,31 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                 </div>
 
                 <div className="glass-card" style={{ padding: '1.5rem', borderRadius: '16px' }}>
-                  <h3 style={{ fontSize: '1.1rem', color: '#fff', marginBottom: '1rem' }}>Recent Quotation Inquiries</h3>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <h3 style={{ fontSize: '1.1rem', color: '#fff' }}>Recent Quotation Inquiries</h3>
+                    <button 
+                      onClick={() => setActiveSection('quotes')} 
+                      className="btn btn-outline btn-sm"
+                      style={{ fontSize: '0.74rem', padding: '0.25rem 0.6rem' }}
+                    >
+                      View All
+                    </button>
+                  </div>
                   {dashboardData.recentQuotes && dashboardData.recentQuotes.length > 0 ? (
                     <div style={{ display: 'grid', gap: '0.75rem' }}>
                       {dashboardData.recentQuotes.map(q => (
-                        <div key={q.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.6rem 0.75rem', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px', fontSize: '0.85rem' }}>
+                        <div key={q.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.65rem 0.85rem', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '10px', fontSize: '0.85rem' }}>
                           <div>
                             <strong style={{ color: '#fb923c' }}>{q.request_number}</strong>
-                            <div style={{ color: '#94a3b8' }}>{q.customer_name} • {q.material_name} ({q.quantity} {q.unit})</div>
+                            <div style={{ color: '#94a3b8', marginTop: '2px' }}>
+                              {q.customer_name} ({q.customer_mobile})
+                            </div>
+                            <div style={{ color: '#cbd5e1', fontSize: '0.78rem', marginTop: '2px' }}>
+                              💬 {q.quantity} {q.unit} of {q.material_name}
+                            </div>
                           </div>
-                          <div>
-                            <span className="badge badge-orange">{q.status}</span>
+                          <div style={{ textAlign: 'right' }}>
+                            <span className={`badge ${q.status === 'Converted' ? 'badge-green' : 'badge-orange'}`}>{q.status}</span>
                           </div>
                         </div>
                       ))}
@@ -559,8 +816,9 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                 </button>
               </div>
 
-              <div className="glass-card" style={{ borderRadius: '14px', overflow: 'hidden' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
+              {/* Desktop Table View */}
+              <div className="glass-card table-responsive-wrapper admin-desktop-table" style={{ borderRadius: '14px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <table style={{ width: '100%', minWidth: '600px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
                   <thead>
                     <tr style={{ background: 'rgba(255, 255, 255, 0.05)', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
                       <th style={{ padding: '0.85rem 1rem' }}>Material</th>
@@ -600,7 +858,7 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                         <td style={{ padding: '0.85rem 1rem', fontWeight: 700, color: '#38bdf8' }}>₹{m.price.toLocaleString('en-IN')}</td>
                         <td style={{ padding: '0.85rem 1rem', color: '#cbd5e1' }}>{m.unit}</td>
                         <td style={{ padding: '0.85rem 1rem' }}>
-                          {m.available ? <span className="badge badge-green">In Stock</span> : <span className="badge badge-red">Disabled</span>}
+                          {m.available ? <span className="badge badge-green">Available</span> : <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)' }}>Temporarily Not Available</span>}
                         </td>
                         <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
                           <button
@@ -626,6 +884,68 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                   </tbody>
                 </table>
               </div>
+
+              {/* Mobile Cards View for Materials */}
+              <div className="admin-mobile-cards">
+                {materials.map((m) => (
+                  <div key={m.id} className="glass-card" style={{ padding: '1rem', borderRadius: '14px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                    <div style={{ display: 'flex', gap: '0.85rem', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                      <div style={{ position: 'relative', width: '54px', height: '54px', borderRadius: '10px', overflow: 'hidden', background: '#091122', flexShrink: 0, border: '1px solid rgba(255,255,255,0.1)' }}>
+                        <img src={m.image_url || '/images/hero.jpg'} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.src = '/images/hero.jpg'; }} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.4rem' }}>
+                          <h4 style={{ margin: 0, fontSize: '0.96rem', fontWeight: 800, color: '#fff', wordBreak: 'break-word' }}>{m.name}</h4>
+                          {m.available ? <span className="badge badge-green" style={{ flexShrink: 0 }}>Available</span> : <span className="badge" style={{ flexShrink: 0, background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)' }}>Temporarily Not Available</span>}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>Category: {m.category}</div>
+                        <label style={{ fontSize: '0.72rem', color: '#38bdf8', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', marginTop: '4px' }}>
+                          <Upload size={11} />
+                          <span>{uploadingImageKey === `mat-${m.id}` ? 'Uploading...' : 'Change Picture'}</span>
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            style={{ display: 'none' }} 
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                handleDirectMaterialImageUpload(m.id, e.target.files[0]);
+                              }
+                            }} 
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', marginBottom: '0.75rem' }}>
+                      <div>
+                        <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Unit Rate: </span>
+                        <strong style={{ fontSize: '1.05rem', color: '#38bdf8' }}>₹{m.price.toLocaleString('en-IN')}</strong>
+                        <span style={{ fontSize: '0.75rem', color: '#cbd5e1' }}> / {m.unit}</span>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.65rem', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '0.65rem' }}>
+                      <button
+                        onClick={() => {
+                          setMatForm(m);
+                          setMatModalOpen(true);
+                        }}
+                        className="btn btn-outline btn-sm"
+                        style={{ fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+                      >
+                        <Edit3 size={13} /> Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteMaterial(m.id)}
+                        className="btn btn-sm"
+                        style={{ fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem', background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)' }}
+                      >
+                        <Trash2 size={13} /> Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -650,7 +970,7 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
               )}
 
               {/* 1. Home & About Picture Section */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '1.75rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: '1.75rem' }}>
                 
                 {/* Home Hero Picture Card */}
                 <div className="glass-card" style={{ padding: '1.75rem', borderRadius: '18px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
@@ -795,7 +1115,7 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                   </p>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '1.5rem' }}>
                   
                   {/* Vehicle 1: Tractor */}
                   <div style={{ background: 'rgba(255, 255, 255, 0.03)', borderRadius: '14px', padding: '1.25rem', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
@@ -918,53 +1238,291 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
           {/* TAB 3: SITE DELIVERIES MANAGEMENT */}
           {activeSection === 'deliveries' && (
             <div>
-              <p style={{ color: '#94a3b8', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-                Track and update vehicle dispatches across Puducherry.
-              </p>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+                <p style={{ color: '#94a3b8', fontSize: '0.9rem', margin: 0 }}>
+                  Track, update, and dispatch tipper vehicle orders across Puducherry ({deliveries?.length || 0} total).
+                </p>
+                <button
+                  onClick={() => loadAllAdminData(true)}
+                  className="btn btn-outline btn-sm"
+                  style={{ fontSize: '0.78rem' }}
+                >
+                  <RefreshCw size={12} /> Refresh Dispatches
+                </button>
+              </div>
 
-              <div className="glass-card" style={{ borderRadius: '14px', overflow: 'hidden' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
+              <div className="glass-card table-responsive-wrapper admin-desktop-table" style={{ borderRadius: '14px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <table style={{ width: '100%', minWidth: '820px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
                   <thead>
                     <tr style={{ background: 'rgba(255, 255, 255, 0.05)', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
                       <th style={{ padding: '0.85rem 1rem' }}>Tracking ID</th>
                       <th style={{ padding: '0.85rem 1rem' }}>Customer & Contact</th>
                       <th style={{ padding: '0.85rem 1rem' }}>Material & Qty</th>
-                      <th style={{ padding: '0.85rem 1rem' }}>Site Address</th>
+                      <th style={{ padding: '0.85rem 1rem' }}>Booked Amount</th>
+                      <th style={{ padding: '0.85rem 1rem' }}>Site Delivery Address</th>
                       <th style={{ padding: '0.85rem 1rem' }}>Status</th>
-                      <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>Change Status</th>
+                      <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {deliveries.map((del) => (
-                      <tr key={del.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
-                        <td style={{ padding: '0.85rem 1rem', fontWeight: 800, color: '#38bdf8' }}>{del.request_number}</td>
-                        <td style={{ padding: '0.85rem 1rem' }}>
-                          <div style={{ color: '#fff', fontWeight: 600 }}>{del.customer_name}</div>
-                          <div style={{ color: '#94a3b8', fontSize: '0.8rem' }}>{del.customer_mobile}</div>
+                    {deliveries && deliveries.length > 0 ? (
+                      deliveries.map((del) => {
+                        const matchedMat = findMaterialMatch(del.material_name, materials);
+                        const unitPrice = matchedMat ? matchedMat.price : (parseFloat(del.price) || 0);
+                        const qty = parseFloat(del.quantity) || 1;
+                        const estAmount = qty * unitPrice;
+
+                        return (
+                          <tr key={del.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
+                            {/* Column 1: Tracking ID */}
+                            <td style={{ padding: '0.85rem 1rem' }}>
+                              <div style={{ fontWeight: 800, color: '#38bdf8' }}>{del.request_number}</div>
+                              <div style={{ color: '#64748b', fontSize: '0.74rem', marginTop: '3px' }}>
+                                {del.created_at ? new Date(del.created_at).toLocaleDateString('en-IN') : 'Recent'}
+                              </div>
+                            </td>
+
+                            {/* Column 2: Customer & Contact */}
+                            <td style={{ padding: '0.85rem 1rem' }}>
+                              <div style={{ color: '#fff', fontWeight: 600 }}>{del.customer_name}</div>
+                              <a 
+                                href={`tel:${del.customer_mobile}`} 
+                                style={{ color: '#38bdf8', fontSize: '0.8rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px', marginTop: '2px' }}
+                              >
+                                <PhoneCall size={11} /> {del.customer_mobile}
+                              </a>
+                              {del.customer_email && (
+                                <div style={{ color: '#94a3b8', fontSize: '0.74rem', marginTop: '1px' }}>{del.customer_email}</div>
+                              )}
+                            </td>
+
+                            {/* Column 3: Material & Qty */}
+                            <td style={{ padding: '0.85rem 1rem' }}>
+                              <div style={{ color: '#fff', fontWeight: 600 }}>
+                                {del.quantity} {del.unit || 'Ton'} of {del.material_name}
+                              </div>
+                              {del.preferred_date && (
+                                <div style={{ color: '#60a5fa', fontSize: '0.75rem', marginTop: '3px', display: 'inline-flex', alignItems: 'center', gap: '3px', background: 'rgba(96, 165, 250, 0.1)', padding: '1px 6px', borderRadius: '4px' }}>
+                                  <Calendar size={11} /> {del.preferred_date}
+                                </div>
+                              )}
+                              {del.additional_notes && (
+                                <div 
+                                  style={{ color: '#94a3b8', fontSize: '0.74rem', marginTop: '3px', fontStyle: 'italic', maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} 
+                                  title={del.additional_notes}
+                                >
+                                  {del.additional_notes}
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Column 4: Booked Amount */}
+                            <td style={{ padding: '0.85rem 1rem' }}>
+                              <div style={{ fontWeight: 800, color: estAmount > 0 ? '#fb923c' : '#94a3b8', fontSize: '1rem' }}>
+                                {estAmount > 0 ? `₹${estAmount.toLocaleString('en-IN')}` : 'Rate TBD'}
+                              </div>
+                              {unitPrice > 0 && (
+                                <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '2px' }}>
+                                  @ ₹{unitPrice.toLocaleString('en-IN')}/{matchedMat?.unit || del.unit || 'Unit'}
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Column 5: Site Delivery Address */}
+                            <td style={{ padding: '0.85rem 1rem', color: '#cbd5e1', maxWidth: '260px' }}>
+                              <div style={{ wordBreak: 'break-word', fontSize: '0.83rem', lineHeight: 1.4 }}>
+                                {del.delivery_address?.split('\n')[0] || del.delivery_address}
+                              </div>
+                              {del.delivery_address && del.delivery_address.match(/https?:\/\/[^\s\)]+/) && (
+                                <a
+                                  href={del.delivery_address.match(/https?:\/\/[^\s\)]+/)[0]}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{ 
+                                    display: 'inline-flex', 
+                                    alignItems: 'center', 
+                                    gap: '4px', 
+                                    color: '#38bdf8', 
+                                    fontSize: '0.75rem', 
+                                    fontWeight: 700, 
+                                    marginTop: '5px', 
+                                    textDecoration: 'none',
+                                    background: 'rgba(56, 189, 248, 0.12)',
+                                    padding: '2px 7px',
+                                    borderRadius: '5px',
+                                    border: '1px solid rgba(56, 189, 248, 0.25)'
+                                  }}
+                                >
+                                  <MapPin size={11} /> Open Map <ExternalLink size={10} />
+                                </a>
+                              )}
+                            </td>
+
+                            {/* Column 6: Status */}
+                            <td style={{ padding: '0.85rem 1rem' }}>
+                              <span className={`badge ${del.status === 'Delivered' ? 'badge-green' : del.status === 'Cancelled' ? 'badge-red' : del.status === 'Out for Delivery' ? 'badge-blue' : 'badge-orange'}`}>
+                                {del.status}
+                              </span>
+                            </td>
+
+                            {/* Column 7: Actions */}
+                            <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', justifyContent: 'flex-end' }}>
+                                <select
+                                  value={del.status}
+                                  onChange={(e) => handleUpdateDeliveryStatus(del.id, e.target.value)}
+                                  style={{ background: '#0f172a', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', padding: '0.35rem 0.5rem', borderRadius: '6px', fontSize: '0.8rem', cursor: 'pointer' }}
+                                >
+                                  <option value="Pending">Pending</option>
+                                  <option value="Confirmed">Confirmed</option>
+                                  <option value="Processing">Processing</option>
+                                  <option value="Out for Delivery">Out for Delivery</option>
+                                  <option value="Delivered">Delivered</option>
+                                  <option value="Cancelled">Cancelled</option>
+                                </select>
+                                <button
+                                  onClick={() => handleBillDelivery(del)}
+                                  className="btn btn-outline btn-sm"
+                                  style={{ fontSize: '0.74rem', padding: '0.32rem 0.6rem', color: '#fb923c', borderColor: 'rgba(251, 146, 60, 0.4)' }}
+                                  title="Auto-fill details and create invoice for this delivery"
+                                >
+                                  <Receipt size={13} /> Bill
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan="7" style={{ textAlign: 'center', padding: '3.5rem 1rem', color: '#94a3b8' }}>
+                          <Truck size={36} color="#38bdf8" style={{ margin: '0 auto 0.75rem auto', opacity: 0.7 }} />
+                          <div style={{ color: '#fff', fontWeight: 600, marginBottom: '0.25rem' }}>No site delivery orders found</div>
+                          <div style={{ fontSize: '0.82rem' }}>When customers book a delivery on the website, it will show here immediately.</div>
                         </td>
-                        <td style={{ padding: '0.85rem 1rem', color: '#cbd5e1', maxWidth: '240px' }}>
-                          <div style={{ wordBreak: 'break-word' }}>{del.delivery_address}</div>
-                          {del.delivery_address && del.delivery_address.match(/https?:\/\/[^\s\)]+/) && (
-                            <a
-                              href={del.delivery_address.match(/https?:\/\/[^\s\)]+/)[0]}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: '#38bdf8', fontSize: '0.76rem', fontWeight: 700, marginTop: '4px', textDecoration: 'none' }}
-                            >
-                              <MapPin size={12} /> Open Maps Link <ExternalLink size={10} />
-                            </a>
-                          )}
-                        </td>
-                        <td style={{ padding: '0.85rem 1rem' }}>
-                          <span className={`badge ${del.status === 'Delivered' ? 'badge-green' : del.status === 'Cancelled' ? 'badge-red' : 'badge-orange'}`}>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Cards View for Deliveries */}
+              <div className="admin-mobile-cards">
+                {deliveries && deliveries.length > 0 ? (
+                  deliveries.map((del) => {
+                    const matchedMat = findMaterialMatch(del.material_name, materials);
+                    const unitPrice = matchedMat ? matchedMat.price : (parseFloat(del.price) || 0);
+                    const qty = parseFloat(del.quantity) || 1;
+                    const estAmount = qty * unitPrice;
+
+                    return (
+                      <div key={del.id} className="glass-card" style={{ padding: '1rem', borderRadius: '14px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.6rem', gap: '0.5rem' }}>
+                          <div>
+                            <div style={{ fontWeight: 800, color: '#38bdf8', fontSize: '0.92rem' }}>{del.request_number}</div>
+                            <div style={{ color: '#64748b', fontSize: '0.72rem', marginTop: '2px' }}>
+                              {del.created_at ? new Date(del.created_at).toLocaleDateString('en-IN') : 'Recent'}
+                            </div>
+                          </div>
+                          <span className={`badge ${del.status === 'Delivered' ? 'badge-green' : del.status === 'Cancelled' ? 'badge-red' : del.status === 'Out for Delivery' ? 'badge-blue' : 'badge-orange'}`} style={{ flexShrink: 0 }}>
                             {del.status}
                           </span>
-                        </td>
-                        <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
+                        </div>
+
+                        <div style={{ padding: '0.65rem 0.75rem', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '10px', marginBottom: '0.65rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ color: '#fff', fontWeight: 600, fontSize: '0.88rem' }}>{del.customer_name}</span>
+                            <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
+                              {del.customer_mobile && (
+                                <>
+                                  <a
+                                    href={`tel:${del.customer_mobile}`}
+                                    style={{ color: '#38bdf8', background: 'rgba(56, 189, 248, 0.15)', padding: '0.3rem 0.5rem', borderRadius: '6px', fontSize: '0.74rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                  >
+                                    <PhoneCall size={11} /> Call
+                                  </a>
+                                  <a
+                                    href={`https://wa.me/91${del.customer_mobile}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{ color: '#34d399', background: 'rgba(52, 211, 153, 0.15)', padding: '0.3rem 0.5rem', borderRadius: '6px', fontSize: '0.74rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                  >
+                                    <MessageCircle size={11} /> WhatsApp
+                                  </a>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          {del.customer_email && (
+                            <div style={{ color: '#94a3b8', fontSize: '0.74rem' }}>{del.customer_email}</div>
+                          )}
+                        </div>
+
+                        {/* Material & Booked Amount Section */}
+                        <div style={{ padding: '0.75rem', background: 'rgba(251, 146, 60, 0.08)', borderRadius: '10px', border: '1px solid rgba(251, 146, 60, 0.2)', marginBottom: '0.65rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#fff' }}>
+                              📦 {del.quantity} {del.unit || 'Ton'} of {del.material_name}
+                            </div>
+                            <div style={{ fontWeight: 800, color: '#fb923c', fontSize: '1.05rem' }}>
+                              {estAmount > 0 ? `₹${estAmount.toLocaleString('en-IN')}` : 'Rate TBD'}
+                            </div>
+                          </div>
+                          {unitPrice > 0 && (
+                            <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '3px', display: 'flex', justifyContent: 'space-between' }}>
+                              <span>Catalog Rate:</span>
+                              <span>₹{unitPrice.toLocaleString('en-IN')} / {matchedMat?.unit || del.unit || 'Unit'}</span>
+                            </div>
+                          )}
+                          {del.preferred_date && (
+                            <div style={{ color: '#60a5fa', fontSize: '0.74rem', marginTop: '4px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <Calendar size={11} /> Preferred: {del.preferred_date}
+                            </div>
+                          )}
+                          {del.additional_notes && (
+                            <div style={{ color: '#94a3b8', fontSize: '0.74rem', marginTop: '3px', fontStyle: 'italic' }}>
+                              Note: {del.additional_notes}
+                            </div>
+                          )}
+                        </div>
+
+                        {del.delivery_address && (
+                          <div style={{ padding: '0.6rem 0.75rem', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.05)', marginBottom: '0.75rem' }}>
+                            <div style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600, marginBottom: '2px' }}>Site Address:</div>
+                            <div style={{ color: '#cbd5e1', fontSize: '0.8rem', lineHeight: 1.4, wordBreak: 'break-word' }}>
+                              {del.delivery_address.split('\n')[0]}
+                            </div>
+                            {del.delivery_address.match(/https?:\/\/[^\s\)]+/) && (
+                              <a
+                                href={del.delivery_address.match(/https?:\/\/[^\s\)]+/)[0]}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ 
+                                  display: 'inline-flex', 
+                                  alignItems: 'center', 
+                                  gap: '4px', 
+                                  color: '#38bdf8', 
+                                  fontSize: '0.75rem', 
+                                  fontWeight: 700, 
+                                  marginTop: '6px', 
+                                  textDecoration: 'none',
+                                  background: 'rgba(56, 189, 248, 0.12)',
+                                  padding: '3px 8px',
+                                  borderRadius: '5px',
+                                  border: '1px solid rgba(56, 189, 248, 0.25)'
+                                }}
+                              >
+                                <MapPin size={11} /> Open Location in Google Maps <ExternalLink size={10} />
+                              </a>
+                            )}
+                          </div>
+                        )}
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', borderTop: '1px solid rgba(255, 255, 255, 0.06)', paddingTop: '0.65rem' }}>
                           <select
                             value={del.status}
                             onChange={(e) => handleUpdateDeliveryStatus(del.id, e.target.value)}
-                            style={{ background: '#0f172a', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', padding: '0.35rem 0.5rem', borderRadius: '6px', fontSize: '0.8rem' }}
+                            style={{ background: '#0f172a', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', padding: '0.4rem 0.5rem', borderRadius: '6px', fontSize: '0.78rem', cursor: 'pointer', flex: 1 }}
                           >
                             <option value="Pending">Pending</option>
                             <option value="Confirmed">Confirmed</option>
@@ -973,11 +1531,24 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                             <option value="Delivered">Delivered</option>
                             <option value="Cancelled">Cancelled</option>
                           </select>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          <button
+                            onClick={() => handleBillDelivery(del)}
+                            className="btn btn-outline btn-sm"
+                            style={{ fontSize: '0.78rem', padding: '0.4rem 0.75rem', display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#fb923c', borderColor: 'rgba(251, 146, 60, 0.4)' }}
+                          >
+                            <Receipt size={13} /> Bill
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="glass-card" style={{ padding: '2.5rem 1rem', textAlign: 'center', color: '#94a3b8', borderRadius: '14px' }}>
+                    <Truck size={36} color="#38bdf8" style={{ margin: '0 auto 0.75rem auto', opacity: 0.7 }} />
+                    <div style={{ color: '#fff', fontWeight: 600, marginBottom: '0.25rem' }}>No site delivery orders found</div>
+                    <div style={{ fontSize: '0.82rem' }}>When customers book a delivery on the website, it will show here immediately.</div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -985,56 +1556,266 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
           {/* TAB 4: QUOTES MANAGEMENT */}
           {activeSection === 'quotes' && (
             <div>
-              <p style={{ color: '#94a3b8', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-                Customer quotation requests and direct pricing inquiries.
-              </p>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+                <p style={{ color: '#94a3b8', fontSize: '0.9rem', margin: 0 }}>
+                  Customer quotation requests and direct pricing inquiries ({quotes?.length || 0} total).
+                </p>
+                <button
+                  onClick={() => loadAllAdminData(true)}
+                  className="btn btn-outline btn-sm"
+                  style={{ fontSize: '0.78rem' }}
+                >
+                  <RefreshCw size={12} /> Refresh Quotes
+                </button>
+              </div>
 
-              <div className="glass-card" style={{ borderRadius: '14px', overflow: 'hidden' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
+              <div className="glass-card table-responsive-wrapper admin-desktop-table" style={{ borderRadius: '14px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <table style={{ width: '100%', minWidth: '680px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
                   <thead>
                     <tr style={{ background: 'rgba(255, 255, 255, 0.05)', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
                       <th style={{ padding: '0.85rem 1rem' }}>Ref #</th>
-                      <th style={{ padding: '0.85rem 1rem' }}>Customer</th>
-                      <th style={{ padding: '0.85rem 1rem' }}>Material</th>
+                      <th style={{ padding: '0.85rem 1rem' }}>Customer & Contact</th>
+                      <th style={{ padding: '0.85rem 1rem' }}>Material & Qty</th>
                       <th style={{ padding: '0.85rem 1rem' }}>Delivery Location</th>
                       <th style={{ padding: '0.85rem 1rem' }}>Status</th>
-                      <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>Update</th>
+                      <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {quotes.map((q) => (
-                      <tr key={q.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
-                        <td style={{ padding: '0.85rem 1rem', fontWeight: 800, color: '#fb923c' }}>{q.request_number}</td>
-                        <td style={{ padding: '0.85rem 1rem' }}>
-                          <div style={{ color: '#fff', fontWeight: 600 }}>{q.customer_name}</div>
-                          <a href={`tel:${q.customer_mobile}`} style={{ color: '#38bdf8', fontSize: '0.8rem', textDecoration: 'none' }}>
-                            {q.customer_mobile}
-                          </a>
-                        </td>
-                        <td style={{ padding: '0.85rem 1rem', color: '#fff' }}>{q.quantity} {q.unit} {q.material_name}</td>
-                        <td style={{ padding: '0.85rem 1rem', color: '#cbd5e1' }}>{q.delivery_location}</td>
-                        <td style={{ padding: '0.85rem 1rem' }}>
-                          <span className={`badge ${q.status === 'Converted' ? 'badge-green' : 'badge-orange'}`}>
-                            {q.status}
-                          </span>
-                        </td>
-                        <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
-                          <select
-                            value={q.status}
-                            onChange={(e) => handleUpdateQuoteStatus(q.id, e.target.value)}
-                            style={{ background: '#0f172a', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', padding: '0.35rem 0.5rem', borderRadius: '6px', fontSize: '0.8rem' }}
-                          >
-                            <option value="Pending">Pending</option>
-                            <option value="Contacted">Contacted</option>
-                            <option value="Quoted">Quoted</option>
-                            <option value="Converted">Converted</option>
-                            <option value="Closed">Closed</option>
-                          </select>
+                    {quotes && quotes.length > 0 ? (
+                      quotes.map((q) => (
+                        <tr key={q.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
+                          {/* Column 1: Ref # */}
+                          <td style={{ padding: '0.85rem 1rem' }}>
+                            <div style={{ fontWeight: 800, color: '#fb923c' }}>{q.request_number}</div>
+                            <div style={{ color: '#64748b', fontSize: '0.74rem', marginTop: '3px' }}>
+                              {q.created_at ? new Date(q.created_at).toLocaleDateString('en-IN') : 'Recent'}
+                            </div>
+                          </td>
+
+                          {/* Column 2: Customer & Contact */}
+                          <td style={{ padding: '0.85rem 1rem' }}>
+                            <div style={{ color: '#fff', fontWeight: 600 }}>{q.customer_name}</div>
+                            <a 
+                              href={`tel:${q.customer_mobile}`} 
+                              style={{ color: '#38bdf8', fontSize: '0.8rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px', marginTop: '2px' }}
+                            >
+                              <PhoneCall size={11} /> {q.customer_mobile}
+                            </a>
+                            {q.customer_email && (
+                              <div style={{ color: '#94a3b8', fontSize: '0.74rem', marginTop: '1px' }}>{q.customer_email}</div>
+                            )}
+                          </td>
+
+                          {/* Column 3: Material & Qty */}
+                          <td style={{ padding: '0.85rem 1rem' }}>
+                            <div style={{ color: '#fff', fontWeight: 600 }}>
+                              {q.quantity} {q.unit || 'Load'} of {q.material_name}
+                            </div>
+                            {q.message && (
+                              <div 
+                                style={{ color: '#94a3b8', fontSize: '0.74rem', marginTop: '3px', fontStyle: 'italic', maxWidth: '220px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} 
+                                title={q.message}
+                              >
+                                {q.message}
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Column 4: Delivery Location */}
+                          <td style={{ padding: '0.85rem 1rem', color: '#cbd5e1', maxWidth: '260px' }}>
+                            <div style={{ wordBreak: 'break-word', fontSize: '0.83rem', lineHeight: 1.4 }}>
+                              {q.delivery_location?.split('\n')[0] || q.delivery_location}
+                            </div>
+                            {q.delivery_location && q.delivery_location.match(/https?:\/\/[^\s\)]+/) && (
+                              <a
+                                href={q.delivery_location.match(/https?:\/\/[^\s\)]+/)[0]}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ 
+                                  display: 'inline-flex', 
+                                  alignItems: 'center', 
+                                  gap: '4px', 
+                                  color: '#38bdf8', 
+                                  fontSize: '0.75rem', 
+                                  fontWeight: 700, 
+                                  marginTop: '5px', 
+                                  textDecoration: 'none',
+                                  background: 'rgba(56, 189, 248, 0.12)',
+                                  padding: '2px 7px',
+                                  borderRadius: '5px',
+                                  border: '1px solid rgba(56, 189, 248, 0.25)'
+                                }}
+                              >
+                                <MapPin size={11} /> Open Map <ExternalLink size={10} />
+                              </a>
+                            )}
+                          </td>
+
+                          {/* Column 5: Status */}
+                          <td style={{ padding: '0.85rem 1rem' }}>
+                            <span className={`badge ${q.status === 'Converted' ? 'badge-green' : q.status === 'Closed' ? 'badge-red' : 'badge-orange'}`}>
+                              {q.status}
+                            </span>
+                          </td>
+
+                          {/* Column 6: Actions */}
+                          <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', justifyContent: 'flex-end' }}>
+                              <select
+                                value={q.status}
+                                onChange={(e) => handleUpdateQuoteStatus(q.id, e.target.value)}
+                                style={{ background: '#0f172a', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', padding: '0.35rem 0.5rem', borderRadius: '6px', fontSize: '0.8rem', cursor: 'pointer' }}
+                              >
+                                <option value="Pending">Pending</option>
+                                <option value="Contacted">Contacted</option>
+                                <option value="Quoted">Quoted</option>
+                                <option value="Converted">Converted</option>
+                                <option value="Closed">Closed</option>
+                              </select>
+                              <button
+                                onClick={() => handleBillQuote(q)}
+                                className="btn btn-outline btn-sm"
+                                style={{ fontSize: '0.74rem', padding: '0.32rem 0.6rem', color: '#fb923c', borderColor: 'rgba(251, 146, 60, 0.4)' }}
+                                title="Convert Quotation to Invoice"
+                              >
+                                <Receipt size={13} /> Bill
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="6" style={{ textAlign: 'center', padding: '3.5rem 1rem', color: '#94a3b8' }}>
+                          <FileText size={36} color="#fb923c" style={{ margin: '0 auto 0.75rem auto', opacity: 0.7 }} />
+                          <div style={{ color: '#fff', fontWeight: 600, marginBottom: '0.25rem' }}>No quotation inquiries found</div>
+                          <div style={{ fontSize: '0.82rem' }}>When customers submit quote inquiries on the website, they will appear here immediately.</div>
                         </td>
                       </tr>
-                    ))}
+                    )}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Mobile Cards View for Quotes */}
+              <div className="admin-mobile-cards">
+                {quotes && quotes.length > 0 ? (
+                  quotes.map((q) => (
+                    <div key={q.id} className="glass-card" style={{ padding: '1rem', borderRadius: '14px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.6rem', gap: '0.5rem' }}>
+                        <div>
+                          <div style={{ fontWeight: 800, color: '#fb923c', fontSize: '0.92rem' }}>{q.request_number}</div>
+                          <div style={{ color: '#64748b', fontSize: '0.72rem', marginTop: '2px' }}>
+                            {q.created_at ? new Date(q.created_at).toLocaleDateString('en-IN') : 'Recent'}
+                          </div>
+                        </div>
+                        <span className={`badge ${q.status === 'Converted' ? 'badge-green' : q.status === 'Closed' ? 'badge-red' : 'badge-orange'}`} style={{ flexShrink: 0 }}>
+                          {q.status}
+                        </span>
+                      </div>
+
+                      <div style={{ padding: '0.65rem 0.75rem', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '10px', marginBottom: '0.65rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ color: '#fff', fontWeight: 600, fontSize: '0.88rem' }}>{q.customer_name}</span>
+                          <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
+                            {q.customer_mobile && (
+                              <>
+                                <a
+                                  href={`tel:${q.customer_mobile}`}
+                                  style={{ color: '#38bdf8', background: 'rgba(56, 189, 248, 0.15)', padding: '0.3rem 0.5rem', borderRadius: '6px', fontSize: '0.74rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                >
+                                  <PhoneCall size={11} /> Call
+                                </a>
+                                <a
+                                  href={`https://wa.me/91${q.customer_mobile}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{ color: '#34d399', background: 'rgba(52, 211, 153, 0.15)', padding: '0.3rem 0.5rem', borderRadius: '6px', fontSize: '0.74rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                >
+                                  <MessageCircle size={11} /> WhatsApp
+                                </a>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        {q.customer_email && (
+                          <div style={{ color: '#94a3b8', fontSize: '0.74rem' }}>{q.customer_email}</div>
+                        )}
+                      </div>
+
+                      <div style={{ marginBottom: '0.65rem' }}>
+                        <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#fff' }}>
+                          📋 {q.quantity} {q.unit || 'Load'} of {q.material_name}
+                        </div>
+                        {q.message && (
+                          <div style={{ color: '#94a3b8', fontSize: '0.75rem', marginTop: '4px', fontStyle: 'italic', wordBreak: 'break-word' }}>
+                            "{q.message}"
+                          </div>
+                        )}
+                      </div>
+
+                      {q.delivery_location && (
+                        <div style={{ padding: '0.6rem 0.75rem', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.05)', marginBottom: '0.75rem' }}>
+                          <div style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600, marginBottom: '2px' }}>Site Location:</div>
+                          <div style={{ color: '#cbd5e1', fontSize: '0.8rem', lineHeight: 1.4, wordBreak: 'break-word' }}>
+                            {q.delivery_location.split('\n')[0]}
+                          </div>
+                          {q.delivery_location.match(/https?:\/\/[^\s\)]+/) && (
+                            <a
+                              href={q.delivery_location.match(/https?:\/\/[^\s\)]+/)[0]}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ 
+                                display: 'inline-flex', 
+                                alignItems: 'center', 
+                                gap: '4px', 
+                                color: '#38bdf8', 
+                                fontSize: '0.75rem', 
+                                fontWeight: 700, 
+                                marginTop: '6px', 
+                                textDecoration: 'none',
+                                background: 'rgba(56, 189, 248, 0.12)',
+                                padding: '3px 8px',
+                                borderRadius: '5px',
+                                border: '1px solid rgba(56, 189, 248, 0.25)'
+                              }}
+                            >
+                              <MapPin size={11} /> Open Location in Google Maps <ExternalLink size={10} />
+                            </a>
+                          )}
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', borderTop: '1px solid rgba(255, 255, 255, 0.06)', paddingTop: '0.65rem' }}>
+                        <select
+                          value={q.status}
+                          onChange={(e) => handleUpdateQuoteStatus(q.id, e.target.value)}
+                          style={{ background: '#0f172a', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', padding: '0.4rem 0.5rem', borderRadius: '6px', fontSize: '0.78rem', cursor: 'pointer', flex: 1 }}
+                        >
+                          <option value="Pending">Pending</option>
+                          <option value="Contacted">Contacted</option>
+                          <option value="Quoted">Quoted</option>
+                          <option value="Converted">Converted</option>
+                          <option value="Closed">Closed</option>
+                        </select>
+                        <button
+                          onClick={() => handleBillQuote(q)}
+                          className="btn btn-outline btn-sm"
+                          style={{ fontSize: '0.78rem', padding: '0.4rem 0.75rem', display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#fb923c', borderColor: 'rgba(251, 146, 60, 0.4)' }}
+                        >
+                          <Receipt size={13} /> Bill
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="glass-card" style={{ padding: '2.5rem 1rem', textAlign: 'center', color: '#94a3b8', borderRadius: '14px' }}>
+                    <FileText size={36} color="#fb923c" style={{ margin: '0 auto 0.75rem auto', opacity: 0.7 }} />
+                    <div style={{ color: '#fff', fontWeight: 600, marginBottom: '0.25rem' }}>No quotation inquiries found</div>
+                    <div style={{ fontSize: '0.82rem' }}>When customers submit quote inquiries on the website, they will appear here immediately.</div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1068,7 +1849,7 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                         value={billingForm.user_id}
                         onChange={(e) => handleSelectCustomerForBilling(e.target.value)}
                       >
-                        <option value="">-- Manual Customer Entry --</option>
+                        <option value="">-- Manual / Site Delivery Customer Entry --</option>
                         {customers.map(c => (
                           <option key={c.id} value={c.id}>{c.name} ({c.mobile || c.email})</option>
                         ))}
@@ -1081,6 +1862,7 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                         type="text"
                         required
                         className="form-control"
+                        placeholder="Enter full customer name"
                         value={billingForm.customer_name}
                         onChange={(e) => setBillingForm({ ...billingForm, customer_name: e.target.value })}
                       />
@@ -1092,18 +1874,30 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                         type="tel"
                         required
                         className="form-control"
+                        placeholder="e.g. 9876543210"
                         value={billingForm.customer_mobile}
                         onChange={(e) => setBillingForm({ ...billingForm, customer_mobile: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Customer Email (Optional)</label>
+                      <input
+                        type="email"
+                        className="form-control"
+                        placeholder="e.g. client@example.com"
+                        value={billingForm.customer_email || ''}
+                        onChange={(e) => setBillingForm({ ...billingForm, customer_email: e.target.value })}
                       />
                     </div>
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Site Delivery Address</label>
+                    <label className="form-label">Site Delivery Address / Location</label>
                     <input
                       type="text"
                       className="form-control"
-                      placeholder="e.g. Plot 42, Thilaspettai"
+                      placeholder="e.g. Plot 42, Thilaspettai or Google Maps Location"
                       value={billingForm.customer_address}
                       onChange={(e) => setBillingForm({ ...billingForm, customer_address: e.target.value })}
                     />
@@ -1111,117 +1905,265 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
 
                   {/* Multi-material items table */}
                   <div style={{ marginBottom: '1.5rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                      <label className="form-label" style={{ margin: 0, fontWeight: 700, color: '#fff' }}>Materials & Quantities</label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <div>
+                        <label className="form-label" style={{ margin: 0, fontWeight: 700, color: '#fff', fontSize: '0.95rem' }}>
+                          Materials & Quantities
+                        </label>
+                        <span style={{ fontSize: '0.78rem', color: '#94a3b8', marginLeft: '0.5rem' }}>
+                          (Select material, edit rate/price freely, or add multiple items)
+                        </span>
+                      </div>
                       <button
                         type="button"
                         onClick={handleAddBillingItem}
                         className="btn btn-outline btn-sm"
-                        style={{ fontSize: '0.78rem' }}
+                        style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem' }}
                       >
                         <Plus size={14} /> Add Another Material
                       </button>
                     </div>
 
-                    {billingForm.items.map((it, idx) => (
-                      <div key={idx} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr auto', gap: '0.75rem', alignItems: 'center', marginBottom: '0.5rem', background: 'rgba(255,255,255,0.03)', padding: '0.5rem', borderRadius: '8px' }}>
-                        <div>
-                          <select
-                            className="form-control"
-                            value={it.material_name}
-                            onChange={(e) => handleBillingItemChange(idx, 'material_name', e.target.value)}
-                          >
-                            {materials.map(m => (
-                              <option key={m.id} value={m.name}>{m.name}</option>
-                            ))}
-                          </select>
+                    {billingForm.items.length === 0 ? (
+                      <div style={{
+                        padding: '2rem 1rem',
+                        textAlign: 'center',
+                        background: 'rgba(255, 255, 255, 0.02)',
+                        border: '1px dashed rgba(255, 255, 255, 0.15)',
+                        borderRadius: '12px',
+                        color: '#94a3b8'
+                      }}>
+                        <Layers size={32} color="#38bdf8" style={{ margin: '0 auto 0.5rem auto', opacity: 0.6 }} />
+                        <div style={{ color: '#fff', fontWeight: 600, fontSize: '0.92rem', marginBottom: '0.3rem' }}>
+                          No materials chosen yet
                         </div>
-                        <div>
-                          <input
-                            type="number"
-                            min="0.5"
-                            step="0.5"
-                            className="form-control"
-                            placeholder="Qty"
-                            value={it.quantity}
-                            onChange={(e) => handleBillingItemChange(idx, 'quantity', e.target.value)}
-                          />
+                        <div style={{ fontSize: '0.8rem', marginBottom: '1rem' }}>
+                          Click below to select materials from the catalog or enter a custom rate.
                         </div>
-                        <div>
-                          <input
-                            type="text"
-                            className="form-control"
-                            placeholder="Unit"
-                            value={it.unit}
-                            onChange={(e) => handleBillingItemChange(idx, 'unit', e.target.value)}
-                          />
-                        </div>
-                        <div>
-                          <input
-                            type="number"
-                            className="form-control"
-                            placeholder="Price"
-                            value={it.unit_price}
-                            onChange={(e) => handleBillingItemChange(idx, 'unit_price', e.target.value)}
-                          />
-                        </div>
-                        <div style={{ fontWeight: 700, color: '#38bdf8', textAlign: 'right' }}>
-                          ₹{((parseFloat(it.quantity) || 0) * (parseFloat(it.unit_price) || 0)).toLocaleString('en-IN')}
-                        </div>
-                        <div>
-                          {billingForm.items.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveBillingItem(idx)}
-                              style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer' }}
+                        <button
+                          type="button"
+                          onClick={handleAddBillingItem}
+                          className="btn btn-primary btn-sm"
+                        >
+                          <Plus size={14} /> Add Material to Invoice
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: '0.5rem' }}>
+                        <div style={{ minWidth: '650px' }}>
+                          <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: '2.5fr 1fr 1fr 1.3fr 1.2fr 36px',
+                            gap: '0.6rem',
+                            padding: '0.4rem 0.6rem',
+                            color: '#94a3b8',
+                            fontSize: '0.76rem',
+                            fontWeight: 700,
+                            textTransform: 'uppercase'
+                          }}>
+                            <div>Material Item</div>
+                            <div>Quantity</div>
+                            <div>Unit</div>
+                            <div>Rate / Unit Price (₹)</div>
+                            <div style={{ textAlign: 'right' }}>Total (₹)</div>
+                            <div></div>
+                          </div>
+
+                          {billingForm.items.map((it, idx) => (
+                            <div
+                              key={idx}
+                              style={{
+                                display: 'grid',
+                                gridTemplateColumns: '2.5fr 1fr 1fr 1.3fr 1.2fr 36px',
+                                gap: '0.6rem',
+                                alignItems: 'center',
+                                marginBottom: '0.5rem',
+                                background: 'rgba(255,255,255,0.03)',
+                                padding: '0.6rem',
+                                borderRadius: '10px',
+                                border: '1px solid rgba(255,255,255,0.06)'
+                              }}
                             >
-                              &times;
-                            </button>
-                          )}
+                              <div>
+                                <select
+                                  className="form-control"
+                                  value={materials.some(m => m.name === it.material_name) ? it.material_name : (it.material_name ? '__custom__' : '')}
+                                  onChange={(e) => {
+                                    if (e.target.value === '__custom__') {
+                                      handleBillingItemChange(idx, 'material_name', 'Custom Item');
+                                    } else {
+                                      handleBillingItemChange(idx, 'material_name', e.target.value);
+                                    }
+                                  }}
+                                  style={{ fontSize: '0.82rem' }}
+                                >
+                                  <option value="">-- Choose Material --</option>
+                                  {materials.map(m => (
+                                    <option key={m.id} value={m.name}>{m.name} (₹{m.price}/{m.unit})</option>
+                                  ))}
+                                  <option value="__custom__">Manual / Custom Material</option>
+                                </select>
+                                {(!materials.some(m => m.name === it.material_name) || it.material_name === 'Custom Item') && (
+                                  <input
+                                    type="text"
+                                    placeholder="Enter material description"
+                                    className="form-control"
+                                    style={{ fontSize: '0.78rem', marginTop: '0.35rem', padding: '0.3rem 0.6rem' }}
+                                    value={it.material_name === '__custom__' ? '' : it.material_name}
+                                    onChange={(e) => handleBillingItemChange(idx, 'material_name', e.target.value)}
+                                  />
+                                )}
+                              </div>
+
+                              <div>
+                                <input
+                                  type="number"
+                                  min="0.1"
+                                  step="any"
+                                  required
+                                  className="form-control"
+                                  placeholder="Qty"
+                                  style={{ fontSize: '0.82rem' }}
+                                  value={it.quantity}
+                                  onChange={(e) => handleBillingItemChange(idx, 'quantity', e.target.value)}
+                                />
+                              </div>
+
+                              <div>
+                                <input
+                                  type="text"
+                                  className="form-control"
+                                  placeholder="e.g. Load"
+                                  style={{ fontSize: '0.82rem' }}
+                                  value={it.unit}
+                                  onChange={(e) => handleBillingItemChange(idx, 'unit', e.target.value)}
+                                />
+                              </div>
+
+                              <div>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="any"
+                                  required
+                                  className="form-control"
+                                  placeholder="Price (₹)"
+                                  style={{ fontSize: '0.82rem', fontWeight: 600, color: '#38bdf8' }}
+                                  value={it.unit_price}
+                                  onChange={(e) => handleBillingItemChange(idx, 'unit_price', e.target.value)}
+                                />
+                              </div>
+
+                              <div style={{ fontWeight: 800, color: '#38bdf8', textAlign: 'right', fontSize: '0.9rem' }}>
+                                ₹{((parseFloat(it.quantity) || 0) * (parseFloat(it.unit_price) || 0)).toLocaleString('en-IN')}
+                              </div>
+
+                              <div style={{ textAlign: 'center' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveBillingItem(idx)}
+                                  style={{
+                                    background: 'rgba(239, 68, 68, 0.15)',
+                                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                                    color: '#f87171',
+                                    borderRadius: '6px',
+                                    width: '28px',
+                                    height: '28px',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: '1rem',
+                                    lineHeight: 1
+                                  }}
+                                  title="Remove item"
+                                >
+                                  &times;
+                                </button>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
-                    ))}
+                    )}
                   </div>
 
                   {/* Calculations and Finalize */}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-end', gap: '1.5rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                    <div style={{ display: 'flex', gap: '1rem' }}>
-                      <div className="form-group" style={{ marginBottom: 0, width: '140px' }}>
-                        <label className="form-label">Discount (₹)</label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
+                      <div className="form-group" style={{ marginBottom: 0, width: '150px' }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem' }}>Discount (₹)</label>
                         <input
                           type="number"
                           min="0"
+                          step="any"
                           className="form-control"
+                          placeholder="0"
                           value={billingForm.discount}
                           onChange={(e) => setBillingForm({ ...billingForm, discount: e.target.value })}
                         />
                       </div>
 
+                      <div className="form-group" style={{ marginBottom: 0, width: '180px' }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem', color: '#34d399', fontWeight: 700 }}>
+                          Paid Amount (₹) *
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          className="form-control"
+                          placeholder="Amount paid"
+                          style={{ borderColor: 'rgba(52, 211, 153, 0.4)', fontWeight: 700, color: '#34d399' }}
+                          value={billingForm.paid_amount}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const num = parseFloat(val) || 0;
+                            const st = (num >= billingGrandTotal && billingGrandTotal > 0) ? 'Paid' : (num > 0 ? 'Partial' : 'Unpaid');
+                            setBillingForm({ ...billingForm, paid_amount: val, payment_status: st });
+                          }}
+                        />
+                        <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '3px' }}>
+                          Enter ₹0 if not paid yet
+                        </div>
+                      </div>
+
                       <div className="form-group" style={{ marginBottom: 0, width: '140px' }}>
-                        <label className="form-label">Payment Status</label>
+                        <label className="form-label" style={{ fontSize: '0.8rem' }}>Payment Status</label>
                         <select
                           className="form-control"
                           value={billingForm.payment_status}
                           onChange={(e) => setBillingForm({ ...billingForm, payment_status: e.target.value })}
                         >
                           <option value="Paid">Paid</option>
-                          <option value="Unpaid">Unpaid</option>
                           <option value="Partial">Partial</option>
+                          <option value="Unpaid">Unpaid</option>
                         </select>
                       </div>
                     </div>
 
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+                    <div style={{ textAlign: 'right', minWidth: '220px' }}>
+                      <div style={{ fontSize: '0.82rem', color: '#94a3b8', marginBottom: '2px' }}>
                         Subtotal: ₹{billingSubtotal.toLocaleString('en-IN')}
                       </div>
-                      <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#fb923c' }}>
+                      {parseFloat(billingForm.discount) > 0 && (
+                        <div style={{ fontSize: '0.82rem', color: '#f87171', marginBottom: '2px' }}>
+                          Discount: -₹{parseFloat(billingForm.discount).toLocaleString('en-IN')}
+                        </div>
+                      )}
+                      <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fb923c', marginBottom: '4px' }}>
                         Grand Total: ₹{billingGrandTotal.toLocaleString('en-IN')}
+                      </div>
+                      <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#34d399', marginBottom: '2px' }}>
+                        Paid by Customer: ₹{billingPaidAmount.toLocaleString('en-IN')}
+                      </div>
+                      <div style={{ fontSize: '0.92rem', fontWeight: 800, color: billingBalanceDue > 0 ? '#f87171' : '#10b981', marginBottom: '0.75rem' }}>
+                        Pending Balance: ₹{billingBalanceDue.toLocaleString('en-IN')}
                       </div>
                       <button
                         type="submit"
                         className="btn btn-primary"
-                        style={{ marginTop: '0.75rem' }}
+                        style={{ width: '100%', justifyContent: 'center' }}
                       >
                         <Receipt size={16} /> Generate & Save Invoice
                       </button>
@@ -1230,54 +2172,275 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                 </form>
               </div>
 
-              {/* Invoices List */}
-              <h3 style={{ fontSize: '1.2rem', color: '#fff', marginBottom: '1rem' }}>Issued Invoices</h3>
-              <div className="glass-card" style={{ borderRadius: '14px', overflow: 'hidden' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
+              {/* Invoices List Header & Sub-sections */}
+              <div style={{ marginBottom: '1.25rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem' }}>
+                  <div>
+                    <h3 style={{ fontSize: '1.25rem', color: '#fff', margin: '0 0 0.25rem 0' }}>Issued Invoices & Payments</h3>
+                    <p style={{ fontSize: '0.82rem', color: '#94a3b8', margin: 0 }}>
+                      Filter by payment completion, track pending balances, or edit customer payments.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => loadAllAdminData(true)}
+                    className="btn btn-outline btn-sm"
+                    style={{ fontSize: '0.78rem' }}
+                  >
+                    <RefreshCw size={12} /> Refresh Invoices
+                  </button>
+                </div>
+
+                {/* Sub-section Tabs */}
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '0.75rem' }}>
+                  <button
+                    onClick={() => setInvoiceSubTab('all')}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: invoiceSubTab === 'all' ? 'linear-gradient(135deg, #1d4ed8, #2563eb)' : 'rgba(255,255,255,0.04)',
+                      color: invoiceSubTab === 'all' ? '#fff' : '#94a3b8',
+                      fontWeight: 700,
+                      fontSize: '0.85rem',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Receipt size={14} />
+                    All Invoices ({invoices.length})
+                  </button>
+
+                  <button
+                    onClick={() => setInvoiceSubTab('partial')}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: invoiceSubTab === 'partial' ? 'linear-gradient(135deg, #d97706, #f59e0b)' : 'rgba(255,255,255,0.04)',
+                      color: invoiceSubTab === 'partial' ? '#fff' : '#94a3b8',
+                      fontWeight: 700,
+                      fontSize: '0.85rem',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Clock size={14} />
+                    Partially Paid / Pending ({partiallyPaidInvoices.length})
+                  </button>
+
+                  <button
+                    onClick={() => setInvoiceSubTab('paid')}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: invoiceSubTab === 'paid' ? 'linear-gradient(135deg, #059669, #10b981)' : 'rgba(255,255,255,0.04)',
+                      color: invoiceSubTab === 'paid' ? '#fff' : '#94a3b8',
+                      fontWeight: 700,
+                      fontSize: '0.85rem',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <CheckCircle2 size={14} />
+                    Fully Paid ({fullyPaidInvoices.length})
+                  </button>
+                </div>
+              </div>
+
+              {/* Outstanding balance banner if viewing partially paid */}
+              {invoiceSubTab === 'partial' && partiallyPaidInvoices.length > 0 && (
+                <div style={{
+                  padding: '1rem 1.25rem',
+                  borderRadius: '12px',
+                  background: 'rgba(245, 158, 11, 0.1)',
+                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                  marginBottom: '1.25rem',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '0.75rem'
+                }}>
+                  <div>
+                    <div style={{ color: '#fbbf24', fontWeight: 700, fontSize: '0.92rem' }}>
+                      Pending Balances Across {partiallyPaidInvoices.length} Customer Invoices
+                    </div>
+                    <div style={{ color: '#94a3b8', fontSize: '0.78rem', marginTop: '2px' }}>
+                      Includes customers with ₹0 paid and customers with remaining dues. Click "Edit Payment" to record payments.
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{ fontSize: '0.74rem', color: '#94a3b8', textTransform: 'uppercase' }}>Total Due: </span>
+                    <span style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fb923c' }}>
+                      ₹{totalOutstandingBalance.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Desktop Table View for Invoices */}
+              <div className="glass-card table-responsive-wrapper admin-desktop-table" style={{ borderRadius: '14px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <table style={{ width: '100%', minWidth: '760px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
                   <thead>
                     <tr style={{ background: 'rgba(255, 255, 255, 0.05)', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
                       <th style={{ padding: '0.85rem 1rem' }}>Invoice #</th>
                       <th style={{ padding: '0.85rem 1rem' }}>Customer</th>
                       <th style={{ padding: '0.85rem 1rem' }}>Date</th>
-                      <th style={{ padding: '0.85rem 1rem' }}>Grand Total</th>
-                      <th style={{ padding: '0.85rem 1rem' }}>Payment</th>
+                      <th style={{ padding: '0.85rem 1rem' }}>Total Amount</th>
+                      <th style={{ padding: '0.85rem 1rem' }}>Amount Paid</th>
+                      <th style={{ padding: '0.85rem 1rem' }}>Balance Due</th>
+                      <th style={{ padding: '0.85rem 1rem' }}>Payment Status</th>
                       <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {invoices.map((inv) => (
-                      <tr key={inv.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
-                        <td style={{ padding: '0.85rem 1rem', fontWeight: 800, color: '#38bdf8' }}>{inv.invoice_number}</td>
-                        <td style={{ padding: '0.85rem 1rem' }}>
-                          <div style={{ color: '#fff', fontWeight: 600 }}>{inv.customer_name}</div>
-                          <div style={{ color: '#94a3b8', fontSize: '0.8rem' }}>{inv.customer_mobile}</div>
+                    {filteredInvoices.length > 0 ? (
+                      filteredInvoices.map((inv) => {
+                        const paid = inv.paid_amount != null ? Number(inv.paid_amount) : (inv.payment_status === 'Paid' ? inv.grand_total : 0);
+                        const balanceDue = Math.max(0, inv.grand_total - paid);
+                        return (
+                          <tr key={inv.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
+                            <td style={{ padding: '0.85rem 1rem', fontWeight: 800, color: '#38bdf8' }}>{inv.invoice_number}</td>
+                            <td style={{ padding: '0.85rem 1rem' }}>
+                              <div style={{ color: '#fff', fontWeight: 600 }}>{inv.customer_name}</div>
+                              <div style={{ color: '#94a3b8', fontSize: '0.8rem' }}>{inv.customer_mobile}</div>
+                            </td>
+                            <td style={{ padding: '0.85rem 1rem', color: '#94a3b8' }}>{new Date(inv.created_at).toLocaleDateString()}</td>
+                            <td style={{ padding: '0.85rem 1rem', fontWeight: 700, color: '#fb923c' }}>
+                              ₹{inv.grand_total.toLocaleString('en-IN')}
+                            </td>
+                            <td style={{ padding: '0.85rem 1rem', fontWeight: 700, color: '#34d399' }}>
+                              ₹{paid.toLocaleString('en-IN')}
+                            </td>
+                            <td style={{ padding: '0.85rem 1rem', fontWeight: 800, color: balanceDue > 0 ? '#f87171' : '#10b981' }}>
+                              ₹{balanceDue.toLocaleString('en-IN')}
+                            </td>
+                            <td style={{ padding: '0.85rem 1rem' }}>
+                              <span className={`badge ${inv.payment_status === 'Paid' ? 'badge-green' : inv.payment_status === 'Partial' ? 'badge-orange' : 'badge-red'}`}>
+                                {inv.payment_status}
+                              </span>
+                            </td>
+                            <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', justifyContent: 'flex-end' }}>
+                                <button
+                                  onClick={() => handleOpenPaymentModal(inv)}
+                                  className="btn btn-outline btn-sm"
+                                  style={{ fontSize: '0.78rem', padding: '0.35rem 0.65rem', color: '#38bdf8', borderColor: 'rgba(56, 189, 248, 0.3)' }}
+                                  title="Edit amount paid by customer"
+                                >
+                                  <DollarSign size={13} /> Edit Payment
+                                </button>
+                                <button
+                                  onClick={() => onViewInvoice(inv)}
+                                  className="btn btn-outline btn-sm"
+                                  style={{ fontSize: '0.78rem', padding: '0.35rem 0.65rem' }}
+                                >
+                                  <Printer size={13} /> Print / PDF
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan="8" style={{ textAlign: 'center', padding: '2.5rem 1rem', color: '#94a3b8' }}>
+                          No invoices match the current filter ({invoiceSubTab === 'partial' ? 'Partially Paid / Pending' : invoiceSubTab === 'paid' ? 'Fully Paid' : 'All'}).
                         </td>
-                        <td style={{ padding: '0.85rem 1rem', color: '#94a3b8' }}>{new Date(inv.created_at).toLocaleDateString()}</td>
-                        <td style={{ padding: '0.85rem 1rem', fontWeight: 700, color: '#fb923c' }}>₹{inv.grand_total.toLocaleString('en-IN')}</td>
-                        <td style={{ padding: '0.85rem 1rem' }}>
-                          <select
-                            value={inv.payment_status}
-                            onChange={(e) => handleUpdateInvoicePayment(inv.id, e.target.value)}
-                            style={{ background: '#0f172a', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', padding: '0.2rem 0.5rem', borderRadius: '6px', fontSize: '0.8rem' }}
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Cards View for Invoices */}
+              <div className="admin-mobile-cards">
+                {filteredInvoices && filteredInvoices.length > 0 ? (
+                  filteredInvoices.map((inv) => {
+                    const paid = inv.paid_amount != null ? Number(inv.paid_amount) : (inv.payment_status === 'Paid' ? inv.grand_total : 0);
+                    const balanceDue = Math.max(0, inv.grand_total - paid);
+                    return (
+                      <div key={inv.id} className="glass-card" style={{ padding: '1rem', borderRadius: '14px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.6rem' }}>
+                          <div>
+                            <div style={{ fontWeight: 800, color: '#38bdf8', fontSize: '0.92rem' }}>{inv.invoice_number}</div>
+                            <div style={{ color: '#64748b', fontSize: '0.72rem', marginTop: '2px' }}>
+                              {new Date(inv.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            </div>
+                          </div>
+                          <span className={`badge ${inv.payment_status === 'Paid' ? 'badge-green' : inv.payment_status === 'Partial' ? 'badge-orange' : 'badge-red'}`}>
+                            {inv.payment_status}
+                          </span>
+                        </div>
+
+                        <div style={{ padding: '0.65rem 0.75rem', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '10px', marginBottom: '0.65rem' }}>
+                          <div style={{ color: '#fff', fontWeight: 600, fontSize: '0.88rem' }}>{inv.customer_name}</div>
+                          {inv.customer_mobile && (
+                            <div style={{ color: '#94a3b8', fontSize: '0.78rem', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <PhoneCall size={11} color="#38bdf8" /> {inv.customer_mobile}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Amount breakdown */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', background: 'rgba(255,255,255,0.02)', padding: '0.6rem', borderRadius: '8px', marginBottom: '0.75rem', textAlign: 'center' }}>
+                          <div>
+                            <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>Total Bill</div>
+                            <div style={{ fontWeight: 800, color: '#fb923c', fontSize: '0.88rem' }}>
+                              ₹{inv.grand_total.toLocaleString('en-IN')}
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>Paid</div>
+                            <div style={{ fontWeight: 700, color: '#34d399', fontSize: '0.88rem' }}>
+                              ₹{paid.toLocaleString('en-IN')}
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>Balance Due</div>
+                            <div style={{ fontWeight: 800, color: balanceDue > 0 ? '#f87171' : '#10b981', fontSize: '0.88rem' }}>
+                              ₹{balanceDue.toLocaleString('en-IN')}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', borderTop: '1px solid rgba(255, 255, 255, 0.06)', paddingTop: '0.65rem' }}>
+                          <button
+                            onClick={() => handleOpenPaymentModal(inv)}
+                            className="btn btn-outline btn-sm"
+                            style={{ flex: 1, fontSize: '0.76rem', padding: '0.4rem 0.5rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px', color: '#38bdf8', borderColor: 'rgba(56, 189, 248, 0.3)' }}
                           >
-                            <option value="Paid">Paid</option>
-                            <option value="Unpaid">Unpaid</option>
-                            <option value="Partial">Partial</option>
-                          </select>
-                        </td>
-                        <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
+                            <DollarSign size={13} /> Edit Payment
+                          </button>
                           <button
                             onClick={() => onViewInvoice(inv)}
                             className="btn btn-outline btn-sm"
-                            style={{ fontSize: '0.8rem' }}
+                            style={{ flex: 1, fontSize: '0.76rem', padding: '0.4rem 0.5rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
                           >
-                            <Printer size={14} /> Print / PDF
+                            <Printer size={13} /> Print / PDF
                           </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="glass-card" style={{ padding: '2.5rem 1rem', textAlign: 'center', color: '#94a3b8', borderRadius: '14px' }}>
+                    <Receipt size={36} color="#38bdf8" style={{ margin: '0 auto 0.75rem auto', opacity: 0.7 }} />
+                    <div style={{ color: '#fff', fontWeight: 600, marginBottom: '0.25rem' }}>
+                      No invoices found in this view
+                    </div>
+                    <div style={{ fontSize: '0.82rem' }}>
+                      {invoiceSubTab === 'partial' ? 'No partially paid or pending invoices.' : invoiceSubTab === 'paid' ? 'No fully paid invoices yet.' : 'Generate an invoice using the form above.'}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1328,8 +2491,10 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
               <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '1.25rem' }}>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
                   {[
-                    { id: 'logged_in', label: `Logged-In Customers (${customers.filter(c => (c.login_count > 0 || c.last_login)).length})`, icon: <UserCheck size={14} /> },
-                    { id: 'all', label: `All Users (${customers.length})`, icon: <Users size={14} /> },
+                    { id: 'all', label: `All Accounts (${customers.length})`, icon: <Users size={14} /> },
+                    { id: 'customers', label: `Customers (${customers.filter(c => !c.role || c.role === 'CUSTOMER').length})`, icon: <UserCheck size={14} /> },
+                    { id: 'admins', label: `Staff & Admins (${customers.filter(c => c.role === 'ADMIN' || c.role === 'SUPER_ADMIN').length})`, icon: <ShieldCheck size={14} /> },
+                    { id: 'logged_in', label: `Logged-In (${customers.filter(c => (c.login_count > 0 || c.last_login)).length})`, icon: <UserCheck size={14} /> },
                     { id: 'google', label: `Google (${customers.filter(c => c.is_google_user).length})`, icon: <Globe size={14} /> },
                     { id: 'email', label: `Email Accounts (${customers.filter(c => !c.is_google_user).length})`, icon: <Mail size={14} /> },
                     { id: 'recent', label: `Active (7 Days) (${customers.filter(c => c.last_login && (new Date() - new Date(c.last_login)) < 7 * 86400000).length})`, icon: <Clock size={14} /> }
@@ -1359,13 +2524,13 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                   ))}
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: '260px', flex: '1 1 260px', maxWidth: '400px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: '240px', flex: '1 1 240px', maxWidth: '400px' }}>
                   <div style={{ position: 'relative', width: '100%' }}>
                     <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
                     <input
                       type="text"
                       className="form-control"
-                      placeholder="Search customer name, mobile, email..."
+                      placeholder="Search name, mobile, email..."
                       value={customerSearch}
                       onChange={(e) => setCustomerSearch(e.target.value)}
                       style={{ paddingLeft: '2.25rem', fontSize: '0.84rem', padding: '0.55rem 0.75rem 0.55rem 2.25rem' }}
@@ -1375,11 +2540,11 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
               </div>
 
               {/* Customer Directory Table */}
-              <div className="glass-card" style={{ borderRadius: '14px', overflow: 'hidden' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
+              <div className="glass-card table-responsive-wrapper admin-desktop-table" style={{ borderRadius: '14px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <table style={{ width: '100%', minWidth: '720px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
                   <thead>
                     <tr style={{ background: 'rgba(255, 255, 255, 0.05)', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                      <th style={{ padding: '0.9rem 1rem' }}>Customer Profile</th>
+                      <th style={{ padding: '0.9rem 1rem' }}>User / Customer Profile</th>
                       <th style={{ padding: '0.9rem 1rem' }}>Login Method</th>
                       <th style={{ padding: '0.9rem 1rem' }}>Mobile / Phone</th>
                       <th style={{ padding: '0.9rem 1rem' }}>Login Count</th>
@@ -1392,6 +2557,8 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                     {customers
                       .filter((c) => {
                         // Tab filters
+                        if (customerFilterTab === 'customers' && (c.role === 'ADMIN' || c.role === 'SUPER_ADMIN')) return false;
+                        if (customerFilterTab === 'admins' && !(c.role === 'ADMIN' || c.role === 'SUPER_ADMIN')) return false;
                         if (customerFilterTab === 'logged_in' && !(c.login_count > 0 || c.last_login)) return false;
                         if (customerFilterTab === 'google' && !c.is_google_user) return false;
                         if (customerFilterTab === 'email' && c.is_google_user) return false;
@@ -1429,7 +2596,7 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                                   width: '36px',
                                   height: '36px',
                                   borderRadius: '50%',
-                                  background: 'linear-gradient(135deg, #1d4ed8, #2563eb)',
+                                  background: c.role === 'SUPER_ADMIN' ? 'linear-gradient(135deg, #dc2626, #b91c1c)' : 'linear-gradient(135deg, #1d4ed8, #2563eb)',
                                   display: 'flex',
                                   alignItems: 'center',
                                   justifyContent: 'center',
@@ -1442,7 +2609,14 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                                 </div>
                               )}
                               <div>
-                                <div style={{ fontWeight: 700, color: '#fff', fontSize: '0.92rem' }}>{c.name || 'Anonymous User'}</div>
+                                <div style={{ fontWeight: 700, color: '#fff', fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+                                  <span>{c.name || 'Anonymous User'}</span>
+                                  {c.role && c.role !== 'CUSTOMER' && (
+                                    <span style={{ fontSize: '0.62rem', background: '#dc2626', color: '#fff', padding: '0.1rem 0.35rem', borderRadius: '4px', fontWeight: 800 }}>
+                                      {c.role}
+                                    </span>
+                                  )}
+                                </div>
                                 <div style={{ fontSize: '0.74rem', color: '#94a3b8' }}>{c.email}</div>
                               </div>
                             </div>
@@ -1590,17 +2764,6 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                               >
                                 <Eye size={13} /> Activity
                               </button>
-                              <button
-                                onClick={() => {
-                                  handleSelectCustomerForBilling(c.id);
-                                  setActiveSection('invoices');
-                                }}
-                                className="btn btn-primary btn-sm"
-                                style={{ fontSize: '0.76rem', padding: '0.35rem 0.65rem' }}
-                                title="Create Invoice for Customer"
-                              >
-                                Bill
-                              </button>
                             </div>
                           </td>
                         </tr>
@@ -1615,6 +2778,166 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                   </tbody>
                 </table>
               </div>
+
+              {/* Mobile Cards View for Customers */}
+              <div className="admin-mobile-cards">
+                {customers
+                  .filter((c) => {
+                    if (customerFilterTab === 'customers' && (c.role === 'ADMIN' || c.role === 'SUPER_ADMIN')) return false;
+                    if (customerFilterTab === 'admins' && !(c.role === 'ADMIN' || c.role === 'SUPER_ADMIN')) return false;
+                    if (customerFilterTab === 'logged_in' && !(c.login_count > 0 || c.last_login)) return false;
+                    if (customerFilterTab === 'google' && !c.is_google_user) return false;
+                    if (customerFilterTab === 'email' && c.is_google_user) return false;
+                    if (customerFilterTab === 'recent') {
+                      if (!c.last_login) return false;
+                      const diff = new Date() - new Date(c.last_login);
+                      if (diff > 7 * 86400000) return false;
+                    }
+                    if (customerSearch) {
+                      const q = customerSearch.toLowerCase();
+                      const matchName = c.name && c.name.toLowerCase().includes(q);
+                      const matchEmail = c.email && c.email.toLowerCase().includes(q);
+                      const matchMobile = c.mobile && c.mobile.toLowerCase().includes(q);
+                      const matchAddr = c.address && c.address.toLowerCase().includes(q);
+                      return matchName || matchEmail || matchMobile || matchAddr;
+                    }
+                    return true;
+                  })
+                  .map((c) => (
+                    <div key={c.id} className="glass-card" style={{ padding: '1rem', borderRadius: '14px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', marginBottom: '0.65rem' }}>
+                        {c.profile_image ? (
+                          <img
+                            src={c.profile_image}
+                            alt={c.name}
+                            referrerPolicy="no-referrer"
+                            crossOrigin="anonymous"
+                            style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', border: '1.5px solid rgba(59, 130, 246, 0.5)', flexShrink: 0 }}
+                          />
+                        ) : (
+                          <div style={{
+                            width: '40px',
+                            height: '40px',
+                            borderRadius: '50%',
+                            background: c.role === 'SUPER_ADMIN' ? 'linear-gradient(135deg, #dc2626, #b91c1c)' : 'linear-gradient(135deg, #1d4ed8, #2563eb)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '0.95rem',
+                            fontWeight: 700,
+                            color: '#fff',
+                            flexShrink: 0
+                          }}>
+                            {c.name ? c.name.charAt(0).toUpperCase() : 'C'}
+                          </div>
+                        )}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.35rem' }}>
+                            <div>
+                              <div style={{ fontWeight: 700, color: '#fff', fontSize: '0.92rem', wordBreak: 'break-word' }}>
+                                {c.name || 'Anonymous User'}
+                              </div>
+                              {c.role && c.role !== 'CUSTOMER' && (
+                                <span style={{ fontSize: '0.65rem', background: '#dc2626', color: '#fff', padding: '0.1rem 0.4rem', borderRadius: '4px', fontWeight: 800 }}>
+                                  {c.role}
+                                </span>
+                              )}
+                            </div>
+                            <button
+                              onClick={async () => {
+                                const newStatus = c.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE';
+                                if (window.confirm(`Set status of ${c.name} to ${newStatus}?`)) {
+                                  await api.toggleCustomerStatus(c.id, newStatus);
+                                  loadAllAdminData();
+                                }
+                              }}
+                              style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}
+                              title="Click to toggle status"
+                            >
+                              <span className={`badge ${c.status === 'ACTIVE' ? 'badge-green' : 'badge-red'}`} style={{ cursor: 'pointer' }}>
+                                {c.status}
+                              </span>
+                            </button>
+                          </div>
+                          <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '2px', wordBreak: 'break-all' }}>{c.email}</div>
+                        </div>
+                      </div>
+
+                      <div style={{ padding: '0.6rem 0.75rem', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '10px', marginBottom: '0.65rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            {c.mobile ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                <span style={{ fontWeight: 600, color: '#34d399', fontSize: '0.84rem' }}>+91 {c.mobile}</span>
+                                <a
+                                  href={`tel:${c.mobile}`}
+                                  style={{ color: '#38bdf8', padding: '2px', display: 'inline-flex' }}
+                                  title="Call"
+                                >
+                                  <PhoneCall size={12} />
+                                </a>
+                                <a
+                                  href={`https://wa.me/91${c.mobile}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{ color: '#10b981', padding: '2px', display: 'inline-flex' }}
+                                  title="WhatsApp"
+                                >
+                                  <MessageCircle size={12} />
+                                </a>
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: '0.74rem', color: '#f87171', fontStyle: 'italic' }}>Pending Verification</span>
+                            )}
+                          </div>
+                          <div>
+                            {c.is_google_user ? (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '0.2rem 0.5rem', borderRadius: '9999px', background: 'rgba(234, 67, 53, 0.12)', border: '1px solid rgba(234, 67, 53, 0.3)', color: '#f87171', fontSize: '0.7rem', fontWeight: 700 }}>
+                                <Globe size={10} /> Google
+                              </span>
+                            ) : (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '0.2rem 0.5rem', borderRadius: '9999px', background: 'rgba(56, 189, 248, 0.12)', border: '1px solid rgba(56, 189, 248, 0.3)', color: '#38bdf8', fontSize: '0.7rem', fontWeight: 700 }}>
+                                <Mail size={10} /> Email
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem', color: '#94a3b8', borderTop: '1px solid rgba(255, 255, 255, 0.05)', paddingTop: '0.35rem' }}>
+                          <span>Logins: <strong style={{ color: (c.login_count || 0) > 3 ? '#34d399' : '#e2e8f0' }}>{c.login_count || 1}</strong></span>
+                          <span>Last: <strong style={{ color: '#f8fafc' }}>{c.last_login ? new Date(c.last_login).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : 'Never'}</strong></span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', borderTop: '1px solid rgba(255, 255, 255, 0.06)', paddingTop: '0.65rem' }}>
+                        <button
+                          onClick={async () => {
+                            try {
+                              setCustomerModalLoading(true);
+                              setCustomerModalOpen(true);
+                              const details = await api.getCustomerDetails(c.id);
+                              setSelectedCustomerDetail(details);
+                            } catch (err) {
+                              alert(err.message || 'Failed to load customer profile');
+                            } finally {
+                              setCustomerModalLoading(false);
+                            }
+                          }}
+                          className="btn btn-outline btn-sm"
+                          style={{ fontSize: '0.76rem', padding: '0.35rem 0.65rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                        >
+                          <Eye size={12} /> Activity
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                {customers.length === 0 && (
+                  <div className="glass-card" style={{ padding: '2.5rem 1rem', textAlign: 'center', color: '#94a3b8', borderRadius: '14px' }}>
+                    <Users size={36} color="#38bdf8" style={{ margin: '0 auto 0.75rem auto', opacity: 0.7 }} />
+                    <div style={{ color: '#fff', fontWeight: 600 }}>No customer accounts found yet</div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -1625,8 +2948,8 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                 Approve testimonials for public display on the homepage.
               </p>
 
-              <div className="glass-card" style={{ borderRadius: '14px', overflow: 'hidden' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
+              <div className="glass-card table-responsive-wrapper" style={{ borderRadius: '14px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <table style={{ width: '100%', minWidth: '600px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
                   <thead>
                     <tr style={{ background: 'rgba(255, 255, 255, 0.05)', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
                       <th style={{ padding: '0.85rem 1rem' }}>Customer</th>
@@ -1744,8 +3067,8 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
               </div>
 
               {/* Admins Table */}
-              <div className="glass-card" style={{ borderRadius: '14px', overflow: 'hidden' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
+              <div className="glass-card table-responsive-wrapper admin-desktop-table" style={{ borderRadius: '14px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <table style={{ width: '100%', minWidth: '640px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
                   <thead>
                     <tr style={{ background: 'rgba(255, 255, 255, 0.05)', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
                       <th style={{ padding: '0.9rem 1rem' }}>Administrator</th>
@@ -1870,6 +3193,124 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                       ))}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Mobile Cards View for Admin Users & Staff */}
+              <div className="admin-mobile-cards">
+                {adminUsers
+                  .filter((a) => {
+                    if (adminRoleFilter !== 'All' && a.role !== adminRoleFilter) return false;
+                    if (adminSearch) {
+                      const q = adminSearch.toLowerCase();
+                      return (a.name && a.name.toLowerCase().includes(q)) || (a.email && a.email.toLowerCase().includes(q));
+                    }
+                    return true;
+                  })
+                  .map((a) => (
+                    <div key={a.id} className="glass-card" style={{ padding: '1rem', borderRadius: '14px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', marginBottom: '0.65rem' }}>
+                        <div style={{
+                          width: '40px',
+                          height: '40px',
+                          borderRadius: '50%',
+                          background: a.role === 'SUPER_ADMIN' ? 'linear-gradient(135deg, #dc2626, #991b1b)' : 'linear-gradient(135deg, #1d4ed8, #2563eb)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#fff',
+                          fontWeight: 700,
+                          fontSize: '0.95rem',
+                          border: '1.5px solid rgba(255, 255, 255, 0.15)',
+                          flexShrink: 0
+                        }}>
+                          {a.name ? a.name.charAt(0).toUpperCase() : 'A'}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.35rem' }}>
+                            <div>
+                              <div style={{ fontWeight: 700, color: '#fff', fontSize: '0.92rem', wordBreak: 'break-word' }}>
+                                {a.name} {a.id === admin.id && <span style={{ fontSize: '0.7rem', color: '#38bdf8' }}>(You)</span>}
+                              </div>
+                              <div style={{ marginTop: '2px', display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                                <span className={`badge ${a.role === 'SUPER_ADMIN' ? 'badge-red' : a.role === 'ADMIN' ? 'badge-blue' : 'badge-green'}`} style={{ fontSize: '0.68rem', padding: '0.1rem 0.4rem' }}>
+                                  {a.role}
+                                </span>
+                              </div>
+                            </div>
+                            <button
+                              onClick={async () => {
+                                if (a.id === admin.id) {
+                                  alert('You cannot deactivate your own account.');
+                                  return;
+                                }
+                                const newStatus = a.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE';
+                                if (window.confirm(`Set status of ${a.name} to ${newStatus}?`)) {
+                                  await api.updateAdmin(a.id, { status: newStatus });
+                                  loadAllAdminData();
+                                }
+                              }}
+                              style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}
+                              title="Click to toggle status"
+                            >
+                              <span className={`badge ${a.status === 'ACTIVE' ? 'badge-green' : 'badge-red'}`} style={{ cursor: 'pointer' }}>
+                                {a.status}
+                              </span>
+                            </button>
+                          </div>
+                          <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '3px', wordBreak: 'break-all' }}>{a.email}</div>
+                        </div>
+                      </div>
+
+                      <div style={{ padding: '0.55rem 0.75rem', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px', marginBottom: '0.65rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#94a3b8' }}>
+                        <span>Last Login: <strong style={{ color: '#e2e8f0' }}>{a.last_login ? new Date(a.last_login).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : 'Never'}</strong></span>
+                        <span>Created: <strong style={{ color: '#cbd5e1' }}>{a.created_at ? new Date(a.created_at).toLocaleDateString('en-IN') : '-'}</strong></span>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', borderTop: '1px solid rgba(255, 255, 255, 0.06)', paddingTop: '0.65rem' }}>
+                        <button
+                          onClick={() => {
+                            setEditAdminForm({
+                              id: a.id,
+                              name: a.name,
+                              email: a.email,
+                              role: a.role,
+                              status: a.status,
+                              password: ''
+                            });
+                            setEditAdminModalOpen(true);
+                          }}
+                          className="btn btn-outline btn-sm"
+                          style={{ padding: '0.35rem 0.65rem', fontSize: '0.76rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                        >
+                          <Edit3 size={13} /> Edit
+                        </button>
+                        {a.id !== admin.id && (
+                          <button
+                            onClick={async () => {
+                              if (window.confirm(`Are you sure you want to permanently delete admin account for ${a.name} (${a.email})?`)) {
+                                try {
+                                  await api.deleteAdmin(a.id);
+                                  loadAllAdminData();
+                                } catch (err) {
+                                  alert(err.message || 'Failed to delete admin');
+                                }
+                              }
+                            }}
+                            className="btn btn-outline btn-sm"
+                            style={{ padding: '0.35rem 0.65rem', borderColor: 'rgba(239, 68, 68, 0.4)', color: '#f87171', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                          >
+                            <Trash2 size={13} /> Delete
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                {adminUsers.length === 0 && (
+                  <div className="glass-card" style={{ padding: '2.5rem 1rem', textAlign: 'center', color: '#94a3b8', borderRadius: '14px' }}>
+                    <ShieldCheck size={36} color="#38bdf8" style={{ margin: '0 auto 0.75rem auto', opacity: 0.7 }} />
+                    <div style={{ color: '#fff', fontWeight: 600 }}>No administrator accounts found</div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -2081,7 +3522,7 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                     onChange={(e) => setMatForm({ ...matForm, available: parseInt(e.target.value) })}
                   >
                     <option value={1}>Available</option>
-                    <option value={0}>Disabled</option>
+                    <option value={0}>Temporarily Not Available</option>
                   </select>
                 </div>
               </div>
@@ -2437,8 +3878,8 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                     <Clock size={16} color="#38bdf8" /> Logged In Session History (Recent Logins)
                   </h4>
 
-                  <div className="glass-card" style={{ borderRadius: '10px', overflow: 'hidden' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                  <div className="glass-card table-responsive-wrapper" style={{ borderRadius: '10px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                    <table style={{ width: '100%', minWidth: '400px', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
                       <thead>
                         <tr style={{ background: 'rgba(255, 255, 255, 0.04)', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
                           <th style={{ padding: '0.65rem 0.85rem' }}>Login Time</th>
@@ -2473,28 +3914,50 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                   </div>
                 </div>
 
-                {/* Orders & Quotes Summary */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                {/* Orders, Deliveries & Quotes Summary */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
                   <div className="glass-card" style={{ padding: '1rem', borderRadius: '10px' }}>
-                    <div style={{ fontWeight: 700, color: '#fff', fontSize: '0.88rem', marginBottom: '0.5rem' }}>
-                      Orders Placed ({selectedCustomerDetail.orders?.length || 0})
+                    <div style={{ fontWeight: 700, color: '#38bdf8', fontSize: '0.88rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <Truck size={14} /> Deliveries Booked ({selectedCustomerDetail.deliveries?.length || 0})
                     </div>
-                    {selectedCustomerDetail.orders?.length > 0 ? (
+                    {selectedCustomerDetail.deliveries?.length > 0 ? (
                       <div style={{ fontSize: '0.78rem', color: '#cbd5e1' }}>
-                        Latest Order: #{selectedCustomerDetail.orders[0].order_number} (₹{selectedCustomerDetail.orders[0].final_amount})
+                        <div><strong>#{selectedCustomerDetail.deliveries[0].request_number}</strong>: {selectedCustomerDetail.deliveries[0].quantity} {selectedCustomerDetail.deliveries[0].unit} {selectedCustomerDetail.deliveries[0].material_name}</div>
+                        <span className="badge badge-blue" style={{ marginTop: '4px' }}>{selectedCustomerDetail.deliveries[0].status}</span>
                       </div>
                     ) : (
-                      <div style={{ fontSize: '0.78rem', color: '#64748b' }}>No orders yet</div>
+                      <div style={{ fontSize: '0.78rem', color: '#64748b' }}>No deliveries booked yet</div>
                     )}
                   </div>
 
                   <div className="glass-card" style={{ padding: '1rem', borderRadius: '10px' }}>
-                    <div style={{ fontWeight: 700, color: '#fff', fontSize: '0.88rem', marginBottom: '0.5rem' }}>
-                      Quotation Inquiries ({selectedCustomerDetail.quotes?.length || 0})
+                    <div style={{ fontWeight: 700, color: '#10b981', fontSize: '0.88rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <Receipt size={14} /> Bills & Invoices ({selectedCustomerDetail.invoices?.length || selectedCustomerDetail.orders?.length || 0})
+                    </div>
+                    {selectedCustomerDetail.invoices?.length > 0 ? (
+                      <div style={{ fontSize: '0.78rem', color: '#cbd5e1' }}>
+                        <div><strong>#{selectedCustomerDetail.invoices[0].invoice_number}</strong>: ₹{selectedCustomerDetail.invoices[0].grand_total.toLocaleString('en-IN')}</div>
+                        <span className={`badge ${selectedCustomerDetail.invoices[0].payment_status === 'Paid' ? 'badge-green' : 'badge-orange'}`} style={{ marginTop: '4px' }}>
+                          {selectedCustomerDetail.invoices[0].payment_status}
+                        </span>
+                      </div>
+                    ) : selectedCustomerDetail.orders?.length > 0 ? (
+                      <div style={{ fontSize: '0.78rem', color: '#cbd5e1' }}>
+                        Latest Order: #{selectedCustomerDetail.orders[0].order_number} (₹{selectedCustomerDetail.orders[0].final_amount})
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '0.78rem', color: '#64748b' }}>No invoices yet</div>
+                    )}
+                  </div>
+
+                  <div className="glass-card" style={{ padding: '1rem', borderRadius: '10px' }}>
+                    <div style={{ fontWeight: 700, color: '#fb923c', fontSize: '0.88rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <FileText size={14} /> Quotation Requests ({selectedCustomerDetail.quotes?.length || 0})
                     </div>
                     {selectedCustomerDetail.quotes?.length > 0 ? (
                       <div style={{ fontSize: '0.78rem', color: '#cbd5e1' }}>
-                        Latest: {selectedCustomerDetail.quotes[0].material_name} ({selectedCustomerDetail.quotes[0].quantity} {selectedCustomerDetail.quotes[0].unit})
+                        <div><strong>#{selectedCustomerDetail.quotes[0].request_number}</strong>: {selectedCustomerDetail.quotes[0].material_name} ({selectedCustomerDetail.quotes[0].quantity} {selectedCustomerDetail.quotes[0].unit})</div>
+                        <span className="badge badge-orange" style={{ marginTop: '4px' }}>{selectedCustomerDetail.quotes[0].status}</span>
                       </div>
                     ) : (
                       <div style={{ fontSize: '0.78rem', color: '#64748b' }}>No quotes requested yet</div>
@@ -2517,6 +3980,124 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Edit Payment Amount Modal */}
+      {paymentModalOpen && paymentModalInvoice && (
+        <div className="modal-overlay" onClick={() => setPaymentModalOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '0.75rem', marginBottom: '1.25rem' }}>
+              <div>
+                <h3 style={{ fontSize: '1.15rem', color: '#fff', margin: 0, fontWeight: 700 }}>
+                  Edit Customer Payment
+                </h3>
+                <div style={{ fontSize: '0.8rem', color: '#38bdf8', marginTop: '2px', fontWeight: 700 }}>
+                  Invoice #{paymentModalInvoice.invoice_number}
+                </div>
+              </div>
+              <button
+                onClick={() => setPaymentModalOpen(false)}
+                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '1.5rem', lineHeight: 1 }}
+              >
+                &times;
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePaymentModal}>
+              <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '0.85rem 1rem', borderRadius: '10px', marginBottom: '1.25rem', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                <div style={{ color: '#fff', fontWeight: 600, fontSize: '0.92rem' }}>
+                  {paymentModalInvoice.customer_name}
+                </div>
+                {paymentModalInvoice.customer_mobile && (
+                  <div style={{ color: '#94a3b8', fontSize: '0.8rem', marginTop: '2px' }}>
+                    {paymentModalInvoice.customer_mobile}
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Total Bill:</div>
+                    <div style={{ fontWeight: 800, color: '#fb923c', fontSize: '1rem' }}>
+                      ₹{paymentModalInvoice.grand_total?.toLocaleString('en-IN')}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Currently Paid:</div>
+                    <div style={{ fontWeight: 700, color: '#34d399', fontSize: '1rem' }}>
+                      ₹{(paymentModalInvoice.paid_amount != null ? Number(paymentModalInvoice.paid_amount) : (paymentModalInvoice.payment_status === 'Paid' ? paymentModalInvoice.grand_total : 0)).toLocaleString('en-IN')}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" style={{ fontWeight: 700, color: '#34d399' }}>
+                  Amount Paid by Customer (₹) *
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  required
+                  autoFocus
+                  className="form-control"
+                  placeholder="Enter amount customer paid"
+                  style={{ fontSize: '1.1rem', fontWeight: 700, color: '#34d399', borderColor: 'rgba(52, 211, 153, 0.4)' }}
+                  value={paymentModalPaidAmount}
+                  onChange={(e) => setPaymentModalPaidAmount(e.target.value)}
+                />
+              </div>
+
+              {/* Quick shortcut buttons */}
+              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setPaymentModalPaidAmount(paymentModalInvoice.grand_total)}
+                  className="btn btn-outline btn-sm"
+                  style={{ flex: 1, fontSize: '0.75rem', color: '#34d399', borderColor: 'rgba(52, 211, 153, 0.3)' }}
+                >
+                  Mark Fully Paid (₹{paymentModalInvoice.grand_total})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentModalPaidAmount(0)}
+                  className="btn btn-outline btn-sm"
+                  style={{ flex: 1, fontSize: '0.75rem', color: '#f87171', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+                >
+                  Mark Unpaid (₹0)
+                </button>
+              </div>
+
+              {/* Balance preview */}
+              <div style={{
+                padding: '0.65rem 0.85rem',
+                borderRadius: '8px',
+                background: 'rgba(255, 255, 255, 0.02)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '1.25rem'
+              }}>
+                <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Remaining Balance Due:</span>
+                <span style={{
+                  fontWeight: 800,
+                  fontSize: '0.95rem',
+                  color: (paymentModalInvoice.grand_total - (parseFloat(paymentModalPaidAmount) || 0)) > 0 ? '#fb923c' : '#34d399'
+                }}>
+                  ₹{Math.max(0, paymentModalInvoice.grand_total - (parseFloat(paymentModalPaidAmount) || 0)).toLocaleString('en-IN')}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
+                  Save Payment Status
+                </button>
+                <button type="button" onClick={() => setPaymentModalOpen(false)} className="btn btn-outline" style={{ flex: 1 }}>
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

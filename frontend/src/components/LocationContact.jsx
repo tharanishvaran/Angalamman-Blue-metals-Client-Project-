@@ -12,7 +12,7 @@ import {
 import { api } from '../api';
 import AnimatedSection from './AnimatedSection';
 
-export default function LocationContact({ settings, onOpenQuote }) {
+export default function LocationContact({ settings, onOpenQuote, user, onRequireLogin }) {
   const [form, setForm] = useState({
     name: '',
     mobile: '',
@@ -24,6 +24,18 @@ export default function LocationContact({ settings, onOpenQuote }) {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Auto-fill logged in user info
+  React.useEffect(() => {
+    if (user) {
+      setForm(prev => ({
+        ...prev,
+        name: user.name || prev.name,
+        mobile: user.mobile || prev.mobile,
+        location: user.address || prev.location
+      }));
+    }
+  }, [user]);
+
   const primaryPhone = settings.phone_primary || '9944076675';
   const secondaryPhone = settings.phone_secondary || '9345009337';
   const additionalPhone = settings.phone_additional || '9629657833';
@@ -32,6 +44,12 @@ export default function LocationContact({ settings, onOpenQuote }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!user && onRequireLogin) {
+      onRequireLogin(form.material);
+      return;
+    }
+
     try {
       setLoading(true);
       await api.submitQuote({
@@ -39,7 +57,7 @@ export default function LocationContact({ settings, onOpenQuote }) {
         customer_mobile: form.mobile,
         material_name: form.material,
         quantity: parseFloat(form.quantity) || 1,
-        unit: 'Load',
+        unit: 'Unit',
         delivery_location: form.location,
         message: form.message
       });
@@ -285,14 +303,20 @@ export default function LocationContact({ settings, onOpenQuote }) {
                     </select>
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Quantity (Loads)</label>
+                    <label className="form-label">Quantity (Units)</label>
                     <input
                       type="number"
-                      min="1"
-                      placeholder="1"
+                      min="0.5"
+                      step="any"
+                      placeholder="e.g. 1"
                       className="form-control"
                       value={form.quantity}
                       onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+                      onBlur={() => {
+                        if (!form.quantity || isNaN(parseFloat(form.quantity))) {
+                          setForm((prev) => ({ ...prev, quantity: '1' }));
+                        }
+                      }}
                     />
                   </div>
                 </div>

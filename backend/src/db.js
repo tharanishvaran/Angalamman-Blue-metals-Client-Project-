@@ -149,6 +149,7 @@ function initDatabase() {
       subtotal REAL NOT NULL,
       discount REAL DEFAULT 0,
       grand_total REAL NOT NULL,
+      paid_amount REAL DEFAULT 0,
       payment_status TEXT CHECK(payment_status IN ('Paid', 'Unpaid', 'Partial')) DEFAULT 'Unpaid',
       notes TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -201,6 +202,12 @@ function initDatabase() {
 
   try {
     db.prepare('ALTER TABLE admins ADD COLUMN profile_image TEXT').run();
+  } catch (e) {
+    // Column already exists
+  }
+
+  try {
+    db.prepare('ALTER TABLE invoices ADD COLUMN paid_amount REAL DEFAULT 0').run();
   } catch (e) {
     // Column already exists
   }

@@ -240,6 +240,24 @@ export default function InvoiceViewModal({ invoice, business = {}, onClose }) {
                 <span>Grand Total:</span>
                 <span>₹{invoice.grand_total.toLocaleString('en-IN')}</span>
               </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.35rem 0', color: '#16a34a', fontSize: '0.95rem', fontWeight: 700 }}>
+                <span>Amount Paid:</span>
+                <span>₹{(invoice.paid_amount != null ? Number(invoice.paid_amount) : (invoice.payment_status === 'Paid' ? invoice.grand_total : 0)).toLocaleString('en-IN')}</span>
+              </div>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                padding: '0.35rem 0',
+                color: (invoice.grand_total - (invoice.paid_amount != null ? Number(invoice.paid_amount) : (invoice.payment_status === 'Paid' ? invoice.grand_total : 0))) > 0 ? '#b91c1c' : '#15803d',
+                fontSize: '0.95rem',
+                fontWeight: 800,
+                borderTop: '1px dashed #cbd5e1',
+                marginTop: '0.25rem',
+                paddingTop: '0.4rem'
+              }}>
+                <span>Balance Due:</span>
+                <span>₹{Math.max(0, invoice.grand_total - (invoice.paid_amount != null ? Number(invoice.paid_amount) : (invoice.payment_status === 'Paid' ? invoice.grand_total : 0))).toLocaleString('en-IN')}</span>
+              </div>
             </div>
           </div>
 
