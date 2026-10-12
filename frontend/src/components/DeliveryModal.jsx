@@ -94,11 +94,29 @@ export default function DeliveryModal({
   ], [settings]);
 
   const activeVehicleObj = useMemo(() => {
-    return fleetVehicles.find(v => 
-      v.name.toLowerCase() === (selectedVehicle || '').toLowerCase() ||
-      (selectedVehicle || '').toLowerCase().includes(v.id) ||
-      v.id.includes((selectedVehicle || '').toLowerCase())
-    ) || fleetVehicles[0];
+    const needle = (selectedVehicle || '').toLowerCase().trim();
+    if (!needle) return fleetVehicles[1];
+
+    // 1. Direct ID match
+    const byId = fleetVehicles.find(v => v.id.toLowerCase() === needle);
+    if (byId) return byId;
+
+    // 2. Exact Name match
+    const byExactName = fleetVehicles.find(v => v.name.toLowerCase() === needle);
+    if (byExactName) return byExactName;
+
+    // 3. Specific vehicle keywords (Lorry / Heavy / Multi-axle first to avoid substring collision with "Tipper"!)
+    if (needle.includes('lorry') || needle.includes('multi-axle') || needle.includes('heavy') || needle.includes('10 wheeler')) {
+      return fleetVehicles.find(v => v.id === 'lorry') || fleetVehicles[2];
+    }
+    if (needle.includes('tractor') || needle.includes('trolley')) {
+      return fleetVehicles.find(v => v.id === 'tractor') || fleetVehicles[0];
+    }
+    if (needle.includes('tipper') || needle.includes('mini') || needle.includes('4-wheeler')) {
+      return fleetVehicles.find(v => v.id === 'tipper') || fleetVehicles[1];
+    }
+
+    return fleetVehicles[0];
   }, [selectedVehicle, fleetVehicles]);
 
   const [form, setForm] = useState({
@@ -135,6 +153,17 @@ export default function DeliveryModal({
       }
     }
   }, [isOpen, isVehicleRequest, initialVehicle, initialMaterial]);
+
+  // Lock body scroll while modal is open to eliminate background scroll interference and jitter
+  useEffect(() => {
+    if (isOpen) {
+      const prevOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = prevOverflow || 'unset';
+      };
+    }
+  }, [isOpen]);
 
   // Sync logged in user profile
   useEffect(() => {
@@ -490,6 +519,27 @@ export default function DeliveryModal({
     onClose();
   };
 
+  const handleDoneAndBack = () => {
+    const isVeh = bookedDelivery?.is_vehicle || bookingMode === 'vehicle';
+    setBookedDelivery(null);
+    setErrors({});
+    setTouched({});
+    onClose();
+
+    // Smoothly scroll back to the section where the customer booked from with glowing animation
+    setTimeout(() => {
+      const targetId = isVeh ? 'vehicles' : 'materials';
+      const targetElem = document.getElementById(targetId);
+      if (targetElem) {
+        targetElem.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        targetElem.classList.add('section-highlight-pulse');
+        setTimeout(() => {
+          targetElem.classList.remove('section-highlight-pulse');
+        }, 2500);
+      }
+    }, 120);
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -500,9 +550,13 @@ export default function DeliveryModal({
         style={{
           maxWidth: '560px',
           width: '95%',
-          maxHeight: '92vh',
+          maxHeight: '90vh',
           overflowY: 'auto',
-          padding: '1.75rem 1.4rem'
+          padding: '1.75rem 1.4rem',
+          WebkitOverflowScrolling: 'touch',
+          overscrollBehavior: 'contain',
+          contain: 'paint',
+          transform: 'translateZ(0)'
         }}
       >
         
@@ -775,8 +829,24 @@ export default function DeliveryModal({
               Our transport driver will phone you before departure with the computerized weighbridge printout.
             </p>
 
-            <button onClick={handleReset} className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }}>
-              Done & Return
+            <button 
+              onClick={handleDoneAndBack} 
+              className="btn btn-primary btn-shimmer" 
+              style={{ 
+                width: '100%', 
+                justifyContent: 'center',
+                padding: '0.9rem',
+                fontSize: '1rem',
+                fontWeight: 800,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                background: bookedDelivery.is_vehicle ? 'linear-gradient(135deg, #ea580c, #f97316)' : undefined,
+                boxShadow: bookedDelivery.is_vehicle ? '0 8px 24px rgba(249, 115, 22, 0.4)' : undefined
+              }}
+            >
+              <CheckCircle2 size={18} />
+              <span>Done</span>
             </button>
           </div>
         ) : (
@@ -884,11 +954,11 @@ export default function DeliveryModal({
                 {/* 3 FLEET VEHICLES LIST */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', marginBottom: '1.1rem' }}>
                   {fleetVehicles.map((v) => {
-                    const isSelected = selectedVehicle === v.name || selectedVehicle === v.id;
+                    const isSelected = activeVehicleObj.id === v.id;
                     return (
                       <div
                         key={v.id}
-                        onClick={() => setSelectedVehicle(v.name)}
+                        onClick={() => setSelectedVehicle(v.id)}
                         style={{
                           display: 'flex',
                           alignItems: 'center',

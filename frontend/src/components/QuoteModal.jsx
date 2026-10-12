@@ -56,6 +56,17 @@ export default function QuoteModal({
     }
   }, [user]);
 
+  // Lock body scroll while modal is open to eliminate background scroll interference
+  useEffect(() => {
+    if (isOpen) {
+      const prevOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = prevOverflow || 'unset';
+      };
+    }
+  }, [isOpen]);
+
   useEffect(() => {
     if (initialMaterial) {
       const match = availableMaterials.find(m => 
@@ -257,6 +268,18 @@ export default function QuoteModal({
     setErrors({});
     setTouched({});
     onClose();
+
+    // Smoothly scroll back to materials section with animation pulse
+    setTimeout(() => {
+      const targetElem = document.getElementById('materials');
+      if (targetElem) {
+        targetElem.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        targetElem.classList.add('section-highlight-pulse');
+        setTimeout(() => {
+          targetElem.classList.remove('section-highlight-pulse');
+        }, 2500);
+      }
+    }, 120);
   };
 
   if (!isOpen) return null;
@@ -269,9 +292,13 @@ export default function QuoteModal({
         style={{
           maxWidth: '560px',
           width: '95%',
-          maxHeight: '92vh',
+          maxHeight: '90vh',
           overflowY: 'auto',
-          padding: '1.75rem 1.4rem'
+          padding: '1.75rem 1.4rem',
+          WebkitOverflowScrolling: 'touch',
+          overscrollBehavior: 'contain',
+          contain: 'paint',
+          transform: 'translateZ(0)'
         }}
       >
         

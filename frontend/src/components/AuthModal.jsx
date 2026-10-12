@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { User, Phone, X, CheckCircle2, Lock, Mail, Eye, EyeOff, Sparkles, UserPlus, LogIn } from 'lucide-react';
 import { GoogleLogin } from '@react-oauth/google';
 import BrandLogo from './BrandLogo';
@@ -55,6 +55,29 @@ export default function AuthModal({
   const [errors, setErrors] = useState({});
   const [generalError, setGeneralError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Lock body scroll while modal is open to ensure smooth scrolling
+  useEffect(() => {
+    if (isOpen) {
+      const prevOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = prevOverflow || 'unset';
+      };
+    }
+  }, [isOpen]);
+
+  // Clear signup password and confirm password whenever modal opens or tab switches to signup
+  useEffect(() => {
+    if (isOpen) {
+      setGeneralError('');
+      setErrors({});
+      if (tab === 'signup') {
+        setSignUpPassword('');
+        setSignUpConfirmPassword('');
+      }
+    }
+  }, [isOpen, tab]);
 
   // Indian mobile validation helper
   const isValidMobile = (num) => {
@@ -223,10 +246,14 @@ export default function AuthModal({
         style={{ 
           maxWidth: '460px', 
           width: '100%', 
-          maxHeight: '92vh', 
+          maxHeight: '90vh', 
           overflowY: 'auto', 
           padding: '1.75rem 1.25rem',
-          boxSizing: 'border-box'
+          boxSizing: 'border-box',
+          WebkitOverflowScrolling: 'touch',
+          overscrollBehavior: 'contain',
+          contain: 'paint',
+          transform: 'translateZ(0)'
         }}
       >
         {/* Close Button */}
@@ -265,7 +292,7 @@ export default function AuthModal({
 
             <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
               <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.85rem' }}>
-                <BrandLogo size={58} showRing={true} showAura={true} showShine={true} showSparkles={true} />
+                <BrandLogo size={52} animated={false} showRing={false} showAura={false} showShine={false} showSparkles={false} interactive={false} />
               </div>
               <h3 style={{ fontSize: '1.45rem', color: '#fff', fontWeight: 700 }}>
                 {tab === 'signin' ? 'Welcome Back' : 'Create Customer Account'}
@@ -344,7 +371,13 @@ export default function AuthModal({
               </button>
               <button
                 type="button"
-                onClick={() => { setTab('signup'); setErrors({}); setGeneralError(''); }}
+                onClick={() => {
+                  setTab('signup');
+                  setSignUpPassword('');
+                  setSignUpConfirmPassword('');
+                  setErrors({});
+                  setGeneralError('');
+                }}
                 style={{
                   flex: 1,
                   padding: '0.6rem',
@@ -369,13 +402,15 @@ export default function AuthModal({
 
             {/* TAB A: SIGN IN FORM */}
             {tab === 'signin' && (
-              <form onSubmit={handleSignInSubmit}>
+              <form onSubmit={handleSignInSubmit} autoComplete="on">
                 <div className="form-group" style={{ marginBottom: '1rem' }}>
                   <label className="form-label">Email Address *</label>
                   <div style={{ position: 'relative' }}>
                     <Mail size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
                     <input
                       type="email"
+                      name="signin_email"
+                      autoComplete="username"
                       required
                       placeholder="name@example.com"
                       className="form-control"
@@ -396,6 +431,8 @@ export default function AuthModal({
                     <Lock size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
                     <input
                       type={showSignInPassword ? 'text' : 'password'}
+                      name="signin_password"
+                      autoComplete="current-password"
                       required
                       placeholder="Enter password"
                       className="form-control"
@@ -441,13 +478,15 @@ export default function AuthModal({
 
             {/* TAB B: CREATE ACCOUNT (SIGN UP) FORM */}
             {tab === 'signup' && (
-              <form onSubmit={handleSignUpSubmit}>
+              <form onSubmit={handleSignUpSubmit} autoComplete="off">
                 <div className="form-group" style={{ marginBottom: '0.9rem' }}>
                   <label className="form-label">Full Name *</label>
                   <div style={{ position: 'relative' }}>
                     <User size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
                     <input
                       type="text"
+                      name="new_user_fullname"
+                      autoComplete="off"
                       required
                       placeholder="Enter full name"
                       className="form-control"
@@ -468,6 +507,8 @@ export default function AuthModal({
                     <Mail size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
                     <input
                       type="email"
+                      name="new_user_email"
+                      autoComplete="off"
                       required
                       placeholder="name@example.com"
                       className="form-control"
@@ -490,6 +531,10 @@ export default function AuthModal({
                     </span>
                     <input
                       type="tel"
+                      name="new_user_mobile_manual"
+                      id="new_user_mobile_manual"
+                      autoComplete="off"
+                      inputMode="tel"
                       required
                       maxLength="10"
                       placeholder="Enter 10-digit number"
@@ -511,6 +556,12 @@ export default function AuthModal({
                     <Lock size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
                     <input
                       type={showSignUpPassword ? 'text' : 'password'}
+                      name="new_user_password_manual"
+                      id="new_user_password_manual"
+                      autoComplete="new-password"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck="false"
                       required
                       placeholder="Minimum 6 characters"
                       className="form-control"
@@ -549,6 +600,12 @@ export default function AuthModal({
                     <Lock size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
                     <input
                       type={showSignUpConfirm ? 'text' : 'password'}
+                      name="new_user_password_confirm_manual"
+                      id="new_user_password_confirm_manual"
+                      autoComplete="new-password"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck="false"
                       required
                       placeholder="Re-enter password"
                       className="form-control"
