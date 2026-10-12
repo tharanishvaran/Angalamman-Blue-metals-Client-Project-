@@ -49,6 +49,8 @@ export default function App() {
   // Modals State
   const [quoteModalOpen, setQuoteModalOpen] = useState(false);
   const [deliveryModalOpen, setDeliveryModalOpen] = useState(false);
+  const [isVehicleModalMode, setIsVehicleModalMode] = useState(false);
+  const [selectedVehicleForModal, setSelectedVehicleForModal] = useState('');
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authInitialMode, setAuthInitialMode] = useState('customer'); // 'customer' or 'admin'
   const [selectedMaterialForModal, setSelectedMaterialForModal] = useState('');
@@ -198,7 +200,12 @@ export default function App() {
         setPendingAction(null);
         setTimeout(() => {
           if (action.type === 'delivery') {
+            setIsVehicleModalMode(false);
             setSelectedMaterialForModal(action.material || '');
+            setDeliveryModalOpen(true);
+          } else if (action.type === 'vehicle') {
+            setIsVehicleModalMode(true);
+            setSelectedVehicleForModal(action.vehicle || 'Hydraulic Tractor Trolley');
             setDeliveryModalOpen(true);
           } else if (action.type === 'quote') {
             setSelectedMaterialForModal(action.material || '');
@@ -235,6 +242,8 @@ export default function App() {
   };
 
   const handleOpenDeliveryWithMaterial = (materialName = '') => {
+    setIsVehicleModalMode(false);
+    setSelectedVehicleForModal('');
     if (!user && !admin) {
       setSelectedMaterialForModal(materialName || '');
       setPendingAction({ type: 'delivery', material: materialName || '' });
@@ -244,6 +253,21 @@ export default function App() {
       return;
     }
     setSelectedMaterialForModal(materialName || '');
+    setDeliveryModalOpen(true);
+  };
+
+  const handleOpenVehicleBooking = (vehicleName = 'Hydraulic Tractor Trolley') => {
+    if (!user && !admin) {
+      setSelectedVehicleForModal(vehicleName || 'Hydraulic Tractor Trolley');
+      setIsVehicleModalMode(true);
+      setPendingAction({ type: 'vehicle', vehicle: vehicleName || 'Hydraulic Tractor Trolley' });
+      setAuthBannerMessage('Please sign in or register to request vehicle & transport service');
+      setAuthInitialMode('customer');
+      setAuthModalOpen(true);
+      return;
+    }
+    setSelectedVehicleForModal(vehicleName || 'Hydraulic Tractor Trolley');
+    setIsVehicleModalMode(true);
     setDeliveryModalOpen(true);
   };
 
@@ -328,7 +352,14 @@ export default function App() {
 
             <VehiclesFleet
               settings={settings}
-              onOpenDelivery={() => handleOpenDeliveryWithMaterial()}
+              onOpenDelivery={(opts) => {
+                if (opts?.isVehicleRequest) {
+                  handleOpenVehicleBooking(opts.vehicleName);
+                } else {
+                  handleOpenDeliveryWithMaterial();
+                }
+              }}
+              onOpenVehicle={(vName) => handleOpenVehicleBooking(vName)}
               onOpenQuote={() => handleOpenQuoteWithMaterial()}
             />
 
@@ -444,14 +475,25 @@ export default function App() {
 
       <DeliveryModal
         isOpen={deliveryModalOpen}
-        onClose={() => setDeliveryModalOpen(false)}
+        onClose={() => {
+          setDeliveryModalOpen(false);
+          setIsVehicleModalMode(false);
+        }}
         initialMaterial={selectedMaterialForModal}
+        initialVehicle={selectedVehicleForModal}
+        isVehicleRequest={isVehicleModalMode}
         materials={materials}
+        settings={settings}
         user={user || admin}
         onRequireLogin={() => {
           setDeliveryModalOpen(false);
-          setPendingAction({ type: 'delivery', material: selectedMaterialForModal });
-          setAuthBannerMessage('Please sign in or register to book site delivery & order materials');
+          if (isVehicleModalMode) {
+            setPendingAction({ type: 'vehicle', vehicle: selectedVehicleForModal || 'Hydraulic Tractor Trolley' });
+            setAuthBannerMessage('Please sign in or register to request vehicle & transport service');
+          } else {
+            setPendingAction({ type: 'delivery', material: selectedMaterialForModal });
+            setAuthBannerMessage('Please sign in or register to book site delivery & order materials');
+          }
           setAuthInitialMode('customer');
           setAuthModalOpen(true);
         }}

@@ -251,13 +251,53 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
     return null;
   };
 
+  // Compute price & amount for a delivery item (supports both materials and transport vehicles)
+  const getDeliveryPricing = (del) => {
+    const matchedMat = findMaterialMatch(del.material_name, materials);
+    if (matchedMat) {
+      const unitPrice = matchedMat.price || 0;
+      const qty = parseFloat(del.quantity) || 1;
+      return {
+        isVehicle: false,
+        unitPrice,
+        estAmount: qty * unitPrice,
+        unitLabel: matchedMat.unit || del.unit || 'Unit',
+        matName: matchedMat.name
+      };
+    }
+
+    const low = (del.material_name || '').toLowerCase();
+    let vRate = 0;
+    let isVehicle = false;
+    if (low.includes('tractor')) {
+      vRate = parseFloat(siteSettings.vehicle_tractor_rate) || 1200;
+      isVehicle = true;
+    } else if (low.includes('tipper') || low.includes('mini')) {
+      vRate = parseFloat(siteSettings.vehicle_tipper_rate) || 1800;
+      isVehicle = true;
+    } else if (low.includes('lorry') || low.includes('heavy')) {
+      vRate = parseFloat(siteSettings.vehicle_lorry_rate) || 3500;
+      isVehicle = true;
+    } else if (del.unit === 'Trip' || (del.additional_notes && del.additional_notes.includes('Vehicle Transport'))) {
+      isVehicle = true;
+      vRate = parseFloat(del.price) || 1500;
+    }
+
+    const unitPrice = vRate || (parseFloat(del.price) || 0);
+    const qty = parseFloat(del.quantity) || 1;
+    return {
+      isVehicle,
+      unitPrice,
+      estAmount: qty * unitPrice,
+      unitLabel: del.unit || (isVehicle ? 'Trip' : 'Unit'),
+      matName: del.material_name || 'Vehicle Transport'
+    };
+  };
+
   // One-click conversion from Site Delivery to Invoice
   const handleBillDelivery = (del) => {
-    const matchedMat = findMaterialMatch(del.material_name, materials);
-    const unitPrice = matchedMat ? matchedMat.price : (parseFloat(del.price) || 0);
+    const pricing = getDeliveryPricing(del);
     const qty = parseFloat(del.quantity) || 1;
-    const matName = matchedMat ? matchedMat.name : (del.material_name || '');
-    const unitName = del.unit || (matchedMat ? matchedMat.unit : 'Unit');
 
     setBillingForm({
       user_id: del.user_id || '',
@@ -268,12 +308,12 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
       discount: 0,
       paid_amount: 0,
       payment_status: 'Unpaid',
-      notes: `Site Delivery Order #${del.request_number}`,
+      notes: pricing.isVehicle ? `Vehicle Transport Booking #${del.request_number}` : `Site Delivery Order #${del.request_number}`,
       items: [{
-        material_name: matName,
+        material_name: pricing.matName,
         quantity: qty,
-        unit: unitName,
-        unit_price: unitPrice
+        unit: pricing.unitLabel,
+        unit_price: pricing.unitPrice
       }]
     });
     setActiveSection('invoices');
@@ -1242,13 +1282,22 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                 <p style={{ color: '#94a3b8', fontSize: '0.9rem', margin: 0 }}>
                   Track, update, and dispatch tipper vehicle orders across Puducherry ({deliveries?.length || 0} total).
                 </p>
-                <button
-                  onClick={() => loadAllAdminData(true)}
-                  className="btn btn-outline btn-sm"
-                  style={{ fontSize: '0.78rem' }}
-                >
-                  <RefreshCw size={12} /> Refresh Dispatches
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => setActiveSection('settings')}
+                    className="btn btn-outline btn-sm"
+                    style={{ fontSize: '0.78rem', color: '#fb923c', borderColor: 'rgba(251, 146, 60, 0.4)' }}
+                  >
+                    <Truck size={13} /> Manage Vehicle Rates
+                  </button>
+                  <button
+                    onClick={() => loadAllAdminData(true)}
+                    className="btn btn-outline btn-sm"
+                    style={{ fontSize: '0.78rem' }}
+                  >
+                    <RefreshCw size={12} /> Refresh Dispatches
+                  </button>
+                </div>
               </div>
 
               <div className="glass-card table-responsive-wrapper admin-desktop-table" style={{ borderRadius: '14px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
@@ -1267,10 +1316,7 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                   <tbody>
                     {deliveries && deliveries.length > 0 ? (
                       deliveries.map((del) => {
-                        const matchedMat = findMaterialMatch(del.material_name, materials);
-                        const unitPrice = matchedMat ? matchedMat.price : (parseFloat(del.price) || 0);
-                        const qty = parseFloat(del.quantity) || 1;
-                        const estAmount = qty * unitPrice;
+                        const pricing = getDeliveryPricing(del);
 
                         return (
                           <tr key={del.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
@@ -1296,10 +1342,10 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                               )}
                             </td>
 
-                            {/* Column 3: Material & Qty */}
+                            {/* Column 3: Material / Vehicle & Qty */}
                             <td style={{ padding: '0.85rem 1rem' }}>
                               <div style={{ color: '#fff', fontWeight: 600 }}>
-                                {del.quantity} {del.unit || 'Ton'} of {del.material_name}
+                                {pricing.isVehicle ? '🚛' : '📦'} {del.quantity} {pricing.unitLabel} of {del.material_name}
                               </div>
                               {del.preferred_date && (
                                 <div style={{ color: '#60a5fa', fontSize: '0.75rem', marginTop: '3px', display: 'inline-flex', alignItems: 'center', gap: '3px', background: 'rgba(96, 165, 250, 0.1)', padding: '1px 6px', borderRadius: '4px' }}>
@@ -1318,12 +1364,12 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
 
                             {/* Column 4: Booked Amount */}
                             <td style={{ padding: '0.85rem 1rem' }}>
-                              <div style={{ fontWeight: 800, color: estAmount > 0 ? '#fb923c' : '#94a3b8', fontSize: '1rem' }}>
-                                {estAmount > 0 ? `₹${estAmount.toLocaleString('en-IN')}` : 'Rate TBD'}
+                              <div style={{ fontWeight: 800, color: pricing.estAmount > 0 ? '#fb923c' : '#94a3b8', fontSize: '1rem' }}>
+                                {pricing.estAmount > 0 ? `₹${pricing.estAmount.toLocaleString('en-IN')}` : 'Rate TBD'}
                               </div>
-                              {unitPrice > 0 && (
+                              {pricing.unitPrice > 0 && (
                                 <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '2px' }}>
-                                  @ ₹{unitPrice.toLocaleString('en-IN')}/{matchedMat?.unit || del.unit || 'Unit'}
+                                  @ ₹{pricing.unitPrice.toLocaleString('en-IN')}/{pricing.unitLabel}
                                 </div>
                               )}
                             </td>
@@ -1410,10 +1456,7 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
               <div className="admin-mobile-cards">
                 {deliveries && deliveries.length > 0 ? (
                   deliveries.map((del) => {
-                    const matchedMat = findMaterialMatch(del.material_name, materials);
-                    const unitPrice = matchedMat ? matchedMat.price : (parseFloat(del.price) || 0);
-                    const qty = parseFloat(del.quantity) || 1;
-                    const estAmount = qty * unitPrice;
+                    const pricing = getDeliveryPricing(del);
 
                     return (
                       <div key={del.id} className="glass-card" style={{ padding: '1rem', borderRadius: '14px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
@@ -1462,16 +1505,16 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                         <div style={{ padding: '0.75rem', background: 'rgba(251, 146, 60, 0.08)', borderRadius: '10px', border: '1px solid rgba(251, 146, 60, 0.2)', marginBottom: '0.65rem' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#fff' }}>
-                              📦 {del.quantity} {del.unit || 'Ton'} of {del.material_name}
+                              {pricing.isVehicle ? '🚛' : '📦'} {del.quantity} {pricing.unitLabel} of {del.material_name}
                             </div>
                             <div style={{ fontWeight: 800, color: '#fb923c', fontSize: '1.05rem' }}>
-                              {estAmount > 0 ? `₹${estAmount.toLocaleString('en-IN')}` : 'Rate TBD'}
+                              {pricing.estAmount > 0 ? `₹${pricing.estAmount.toLocaleString('en-IN')}` : 'Rate TBD'}
                             </div>
                           </div>
-                          {unitPrice > 0 && (
+                          {pricing.unitPrice > 0 && (
                             <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '3px', display: 'flex', justifyContent: 'space-between' }}>
-                              <span>Catalog Rate:</span>
-                              <span>₹{unitPrice.toLocaleString('en-IN')} / {matchedMat?.unit || del.unit || 'Unit'}</span>
+                              <span>{pricing.isVehicle ? 'Trip Rate:' : 'Catalog Rate:'}</span>
+                              <span>₹{pricing.unitPrice.toLocaleString('en-IN')} / {pricing.unitLabel}</span>
                             </div>
                           )}
                           {del.preferred_date && (
@@ -3424,6 +3467,85 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                     value={settingsForm.maps_url || ''}
                     onChange={(e) => setSettingsForm({ ...settingsForm, maps_url: e.target.value })}
                   />
+                </div>
+
+                {/* Dedicated Fleet & Vehicle Transport Pricing Section */}
+                <div style={{
+                  marginTop: '1.25rem',
+                  marginBottom: '1.25rem',
+                  padding: '1.25rem',
+                  background: 'rgba(251, 146, 60, 0.05)',
+                  border: '1px solid rgba(251, 146, 60, 0.25)',
+                  borderRadius: '14px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem' }}>
+                    <Truck size={20} color="#fb923c" />
+                    <h4 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#fff', margin: 0 }}>
+                      Fleet & Transport Vehicle Pricing (₹ / Trip)
+                    </h4>
+                  </div>
+                  <p style={{ fontSize: '0.82rem', color: '#94a3b8', marginBottom: '1.1rem', lineHeight: 1.45 }}>
+                    Manage standard trip amounts charged for each transport vehicle. These rates are automatically displayed on website fleet cards, used when customers book vehicle transport, and populated on invoices.
+                  </p>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 700, color: '#38bdf8' }}>
+                        🚜 Tractor Trolley (₹ / Trip)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="50"
+                        className="form-control"
+                        placeholder="1200"
+                        value={settingsForm.vehicle_tractor_rate || ''}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, vehicle_tractor_rate: e.target.value })}
+                        style={{ fontWeight: 700, color: '#38bdf8' }}
+                      />
+                      <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '4px' }}>
+                        1 - 2 Units / 3 Tons (Narrow streets)
+                      </div>
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 700, color: '#fb923c' }}>
+                        🚚 Mini Tipper Truck (₹ / Trip)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="50"
+                        className="form-control"
+                        placeholder="1800"
+                        value={settingsForm.vehicle_tipper_rate || ''}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, vehicle_tipper_rate: e.target.value })}
+                        style={{ fontWeight: 700, color: '#fb923c' }}
+                      />
+                      <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '4px' }}>
+                        2 - 3 Units / 4.5 Tons (Town & Express)
+                      </div>
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 700, color: '#34d399' }}>
+                        🚛 Heavy Tipper Lorry (₹ / Trip)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="50"
+                        className="form-control"
+                        placeholder="3500"
+                        value={settingsForm.vehicle_lorry_rate || ''}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, vehicle_lorry_rate: e.target.value })}
+                        style={{ fontWeight: 700, color: '#34d399' }}
+                      />
+                      <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '4px' }}>
+                        5 - 10 Units / 16 - 25 Tons (Bulk Supply)
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <button type="submit" className="btn btn-primary" style={{ marginTop: '0.5rem' }}>

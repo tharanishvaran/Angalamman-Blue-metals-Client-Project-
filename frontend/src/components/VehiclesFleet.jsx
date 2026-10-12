@@ -11,8 +11,8 @@ import {
 } from 'lucide-react';
 import AnimatedSection from './AnimatedSection';
 
-export default function VehiclesFleet({ settings, onOpenDelivery, onOpenQuote }) {
-  const primaryPhone = settings.phone_primary || '9944076675';
+export default function VehiclesFleet({ settings = {}, onOpenDelivery, onOpenVehicle, onOpenQuote }) {
+  const primaryPhone = settings?.phone_primary || '9944076675';
 
   // Interactive Quick Delivery Estimator
   const [estMaterial, setEstMaterial] = useState('M-Sand');
@@ -42,7 +42,8 @@ export default function VehiclesFleet({ settings, onOpenDelivery, onOpenQuote })
       capacity: '1 - 2 Units / 3 Tons',
       bestFor: 'Thilaspettai colony streets, individual home builds, compact sites',
       features: 'High ground clearance, 3-way tipping, easy street maneuverability',
-      image: settings.vehicle_tractor_image || '/images/tractor_trolley.jpg'
+      rate: Number(settings?.vehicle_tractor_rate) || 1200,
+      image: settings?.vehicle_tractor_image || '/images/tractor_trolley.jpg'
     },
     {
       name: 'Mini Tipper Truck (4-Wheeler)',
@@ -50,7 +51,8 @@ export default function VehiclesFleet({ settings, onOpenDelivery, onOpenQuote })
       capacity: '2 - 3 Units / 4.5 Tons',
       bestFor: 'Town areas, apartment renovations, rapid commercial drops',
       features: 'Fast transit, automated hydraulic lift, clean precision unloading',
-      image: settings.vehicle_tipper_image || '/images/fleet.jpg'
+      rate: Number(settings?.vehicle_tipper_rate) || 1800,
+      image: settings?.vehicle_tipper_image || '/images/fleet.jpg'
     },
     {
       name: 'Multi-Axle Heavy Tipper Lorry',
@@ -58,7 +60,8 @@ export default function VehiclesFleet({ settings, onOpenDelivery, onOpenQuote })
       capacity: '5 - 10 Units / 16 - 25 Tons',
       bestFor: 'Major infrastructure, layouts, multi-storey RCC pours, road works',
       features: 'Heavy payload, direct quarry-to-site transit, maximum bulk economy',
-      image: settings.vehicle_lorry_image || '/images/heavy_tipper.jpg'
+      rate: Number(settings?.vehicle_lorry_rate) || 3500,
+      image: settings?.vehicle_lorry_image || '/images/heavy_tipper.jpg'
     }
   ];
 
@@ -207,8 +210,21 @@ export default function VehiclesFleet({ settings, onOpenDelivery, onOpenQuote })
               <div style={{ padding: '1.6rem', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                 <div>
                   <h3 style={{ fontSize: '1.35rem', color: '#fff', marginBottom: '0.45rem', fontWeight: 700 }}>{v.name}</h3>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#fb923c', fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.85rem' }}>
-                    <Truck size={17} /> Capacity: {v.capacity}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#fb923c', fontSize: '0.9rem', fontWeight: 700 }}>
+                      <Truck size={17} /> Capacity: {v.capacity}
+                    </div>
+                    <div style={{
+                      background: 'rgba(56, 189, 248, 0.12)',
+                      border: '1px solid rgba(56, 189, 248, 0.3)',
+                      color: '#38bdf8',
+                      padding: '0.2rem 0.6rem',
+                      borderRadius: '6px',
+                      fontSize: '0.86rem',
+                      fontWeight: 800
+                    }}>
+                      ₹{v.rate.toLocaleString('en-IN')} <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600 }}>/ Trip</span>
+                    </div>
                   </div>
                   <p style={{ fontSize: '0.86rem', color: '#cbd5e1', marginBottom: '0.8rem', lineHeight: 1.5 }}>
                     <strong>Ideal for:</strong> {v.bestFor}
@@ -220,7 +236,13 @@ export default function VehiclesFleet({ settings, onOpenDelivery, onOpenQuote })
 
                 <div style={{ marginTop: '1.4rem', paddingTop: '1.1rem', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
                   <button
-                    onClick={() => onOpenDelivery()}
+                    onClick={() => {
+                      if (onOpenVehicle) {
+                        onOpenVehicle(v.name);
+                      } else if (onOpenDelivery) {
+                        onOpenDelivery({ vehicleName: v.name, isVehicleRequest: true });
+                      }
+                    }}
                     className="btn btn-orange btn-sm btn-shimmer"
                     style={{ width: '100%', padding: '0.65rem 1rem' }}
                   >

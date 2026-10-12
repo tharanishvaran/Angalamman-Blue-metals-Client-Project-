@@ -18,6 +18,9 @@ export const DEFAULT_SETTINGS = {
   vehicle_tractor_image: '/images/tractor_trolley.jpg',
   vehicle_tipper_image: '/images/fleet.jpg',
   vehicle_lorry_image: '/images/heavy_tipper.jpg',
+  vehicle_tractor_rate: 1200,
+  vehicle_tipper_rate: 1800,
+  vehicle_lorry_rate: 3500,
   logo_text: 'Sri Angalamman Blue Metals'
 };
 

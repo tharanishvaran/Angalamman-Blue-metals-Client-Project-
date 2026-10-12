@@ -269,7 +269,10 @@ function initDatabase() {
     ['maps_url', 'https://maps.app.goo.gl/Z4SS6rkY7Vknzc3SA'],
     ['operating_hours', 'Mon - Sat: 6:00 AM - 8:00 PM | Sun: 7:00 AM - 1:00 PM'],
     ['hero_image', '/images/hero.jpg'],
-    ['logo_text', 'Sri Angalamman Blue Metals']
+    ['logo_text', 'Sri Angalamman Blue Metals'],
+    ['vehicle_tractor_rate', '1200'],
+    ['vehicle_tipper_rate', '1800'],
+    ['vehicle_lorry_rate', '3500']
   ];
 
   const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');

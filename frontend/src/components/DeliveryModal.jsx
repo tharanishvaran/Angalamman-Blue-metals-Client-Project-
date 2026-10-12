@@ -20,7 +20,10 @@ export default function DeliveryModal({
   isOpen, 
   onClose, 
   initialMaterial = '', 
+  initialVehicle = '',
+  isVehicleRequest = false,
   materials = [], 
+  settings = {},
   user, 
   onRequireLogin 
 }) {
@@ -57,6 +60,47 @@ export default function DeliveryModal({
     return `${y}-${m}-${d}`;
   }, []);
 
+  const [bookingMode, setBookingMode] = useState(isVehicleRequest ? 'vehicle' : 'material');
+  const [selectedVehicle, setSelectedVehicle] = useState(initialVehicle || 'Hydraulic Tractor Trolley');
+
+  const fleetVehicles = useMemo(() => [
+    {
+      id: 'tractor',
+      name: 'Hydraulic Tractor Trolley',
+      type: 'Narrow Street & Residential',
+      capacity: '1 - 2 Units / 3 Tons',
+      bestFor: 'Thilaspettai colony streets, individual home builds, compact sites',
+      rate: Number(settings?.vehicle_tractor_rate) || 1200,
+      image: settings?.vehicle_tractor_image || '/images/tractor_trolley.jpg'
+    },
+    {
+      id: 'tipper',
+      name: 'Mini Tipper Truck (4-Wheeler)',
+      type: 'Express Urban Delivery',
+      capacity: '2 - 3 Units / 4.5 Tons',
+      bestFor: 'Town areas, apartment renovations, rapid commercial drops',
+      rate: Number(settings?.vehicle_tipper_rate) || 1800,
+      image: settings?.vehicle_tipper_image || '/images/fleet.jpg'
+    },
+    {
+      id: 'lorry',
+      name: 'Multi-Axle Heavy Tipper Lorry',
+      type: 'Bulk Commercial Supply',
+      capacity: '5 - 10 Units / 16 - 25 Tons',
+      bestFor: 'Major infrastructure, layouts, multi-storey RCC pours, road works',
+      rate: Number(settings?.vehicle_lorry_rate) || 3500,
+      image: settings?.vehicle_lorry_image || '/images/heavy_tipper.jpg'
+    }
+  ], [settings]);
+
+  const activeVehicleObj = useMemo(() => {
+    return fleetVehicles.find(v => 
+      v.name.toLowerCase() === (selectedVehicle || '').toLowerCase() ||
+      (selectedVehicle || '').toLowerCase().includes(v.id) ||
+      v.id.includes((selectedVehicle || '').toLowerCase())
+    ) || fleetVehicles[0];
+  }, [selectedVehicle, fleetVehicles]);
+
   const [form, setForm] = useState({
     name: '',
     mobile: '',
@@ -77,6 +121,20 @@ export default function DeliveryModal({
   const [detectingGps, setDetectingGps] = useState(false);
   const [gpsSuccess, setGpsSuccess] = useState(false);
   const [bookedDelivery, setBookedDelivery] = useState(null);
+
+  // Sync mode and selections when modal opens or props change
+  useEffect(() => {
+    if (isOpen) {
+      if (isVehicleRequest || initialVehicle) {
+        setBookingMode('vehicle');
+        if (initialVehicle) {
+          setSelectedVehicle(initialVehicle);
+        }
+      } else if (initialMaterial) {
+        setBookingMode('material');
+      }
+    }
+  }, [isOpen, isVehicleRequest, initialVehicle, initialMaterial]);
 
   // Sync logged in user profile
   useEffect(() => {
@@ -230,7 +288,10 @@ export default function DeliveryModal({
     const hasAddress = Boolean(form.address && form.address.trim().length >= 4);
     const hasLink = Boolean(form.location_link && form.location_link.trim().length > 0);
 
-    const baseFields = ['name', 'mobile', 'email', 'material', 'quantity', 'preferred_date'];
+    const baseFields = bookingMode === 'vehicle'
+      ? ['name', 'mobile', 'email', 'preferred_date']
+      : ['name', 'mobile', 'email', 'material', 'quantity', 'preferred_date'];
+
     baseFields.forEach(field => {
       const err = validateField(field, form[field]);
       if (err) newErrors[field] = err;
@@ -309,8 +370,8 @@ export default function DeliveryModal({
       name: true,
       mobile: true,
       email: true,
-      material: true,
-      quantity: true,
+      material: bookingMode === 'material',
+      quantity: bookingMode === 'material',
       preferred_date: true,
       address: true,
       location_link: true
@@ -339,40 +400,69 @@ export default function DeliveryModal({
         fullAddress = `📍 Google Maps Pin: ${trimmedLink}`;
       }
 
-      const combinedNotes = [
-        form.preferred_time_slot ? `Slot: ${form.preferred_time_slot}` : null,
-        form.notes ? `Vehicle: ${form.notes}` : null,
-        `Original Rate: ₹${activeRate.toLocaleString('en-IN')}/${form.unit}`,
-        `Est. Total: ₹${estimatedSubtotal.toLocaleString('en-IN')}`,
-        trimmedLink ? `Maps Link: ${trimmedLink}` : null
-      ].filter(Boolean).join(' | ');
-
+      const isVeh = bookingMode === 'vehicle';
       const formattedDateString = `${form.preferred_date} (${form.preferred_time_slot})`;
 
-      const res = await api.submitDelivery({
-        customer_name: form.name.trim(),
-        customer_mobile: cleanMobile,
-        customer_email: form.email ? form.email.trim() : '',
-        material_name: form.material,
-        quantity: numQuantity,
-        unit: form.unit, // Selected Unit or Ton
-        delivery_address: fullAddress,
-        location_link: trimmedLink || undefined,
-        preferred_date: formattedDateString,
-        additional_notes: combinedNotes
-      });
+      let payload = {};
+      if (isVeh) {
+        const vehicleNotes = [
+          `[Vehicle Transport Request]`,
+          `Vehicle: ${activeVehicleObj.name}`,
+          `Trip Rate: ₹${activeVehicleObj.rate.toLocaleString('en-IN')}`,
+          form.preferred_time_slot ? `Slot: ${form.preferred_time_slot}` : null,
+          form.notes ? `Instructions: ${form.notes}` : null,
+          trimmedLink ? `Maps Link: ${trimmedLink}` : null
+        ].filter(Boolean).join(' | ');
+
+        payload = {
+          customer_name: form.name.trim(),
+          customer_mobile: cleanMobile,
+          customer_email: form.email ? form.email.trim() : '',
+          material_name: activeVehicleObj.name,
+          quantity: 1,
+          unit: 'Trip',
+          delivery_address: fullAddress,
+          location_link: trimmedLink || undefined,
+          preferred_date: formattedDateString,
+          additional_notes: vehicleNotes
+        };
+      } else {
+        const combinedNotes = [
+          form.preferred_time_slot ? `Slot: ${form.preferred_time_slot}` : null,
+          form.notes ? `Vehicle: ${form.notes}` : null,
+          `Original Rate: ₹${activeRate.toLocaleString('en-IN')}/${form.unit}`,
+          `Est. Total: ₹${estimatedSubtotal.toLocaleString('en-IN')}`,
+          trimmedLink ? `Maps Link: ${trimmedLink}` : null
+        ].filter(Boolean).join(' | ');
+
+        payload = {
+          customer_name: form.name.trim(),
+          customer_mobile: cleanMobile,
+          customer_email: form.email ? form.email.trim() : '',
+          material_name: form.material,
+          quantity: numQuantity,
+          unit: form.unit, // Selected Unit or Ton
+          delivery_address: fullAddress,
+          location_link: trimmedLink || undefined,
+          preferred_date: formattedDateString,
+          additional_notes: combinedNotes
+        };
+      }
+
+      const res = await api.submitDelivery(payload);
 
       setBookedDelivery({
         ...(res.delivery || {}),
-        material_name: res.delivery?.material_name || form.material,
-        quantity: res.delivery?.quantity || numQuantity,
-        unit: res.delivery?.unit || form.unit,
+        is_vehicle: isVeh,
+        material_name: isVeh ? activeVehicleObj.name : (res.delivery?.material_name || form.material),
+        quantity: isVeh ? 1 : (res.delivery?.quantity || numQuantity),
+        unit: isVeh ? 'Trip' : (res.delivery?.unit || form.unit),
         customer_name: res.delivery?.customer_name || form.name.trim(),
         customer_mobile: res.delivery?.customer_mobile || cleanMobile,
         delivery_address: res.delivery?.delivery_address || fullAddress,
         preferred_date: res.delivery?.preferred_date || formattedDateString,
-        original_price_rate: activeRate,
-        estimated_total: estimatedSubtotal,
+        original_price_rate: isVeh ? activeVehicleObj.rate : activeRate,
+        estimated_total: isVeh ? activeVehicleObj.rate : estimatedSubtotal,
         preferred_date_raw: form.preferred_date,
         preferred_time_slot: form.preferred_time_slot,
         location_link: form.location_link
@@ -417,23 +507,23 @@ export default function DeliveryModal({
       >
         
         {/* Modal Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
             <div style={{ 
               padding: '0.5rem', 
               borderRadius: '10px', 
               background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.25), rgba(249, 115, 22, 0.25))', 
-              color: '#38bdf8',
+              color: bookingMode === 'vehicle' ? '#fb923c' : '#38bdf8',
               border: '1px solid rgba(56, 189, 248, 0.3)'
             }}>
               <Truck size={22} />
             </div>
             <div>
               <h3 style={{ fontSize: '1.35rem', color: '#fff', fontWeight: 800, margin: 0, letterSpacing: '-0.01em' }}>
-                Book Site Material Delivery
+                {bookingMode === 'vehicle' ? 'Request Transport Vehicle' : 'Book Site Material Delivery'}
               </h3>
-              <div style={{ fontSize: '0.74rem', color: '#fb923c', fontWeight: 700, letterSpacing: '0.04em' }}>
-                EXACT WEIGHBRIDGE TONNAGE • PUDUCHERRY
+              <div style={{ fontSize: '0.74rem', color: bookingMode === 'vehicle' ? '#fb923c' : '#38bdf8', fontWeight: 700, letterSpacing: '0.04em' }}>
+                {bookingMode === 'vehicle' ? 'HYDRAULIC TIPPERS & TRACTORS • PUDUCHERRY FLEET' : 'EXACT WEIGHBRIDGE TONNAGE • PUDUCHERRY'}
               </div>
             </div>
           </div>
@@ -455,6 +545,61 @@ export default function DeliveryModal({
             aria-label="Close"
           >
             <X size={18} />
+          </button>
+        </div>
+
+        {/* Mode Toggle Switcher: [Book Materials] vs [Request Vehicle] */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: '0.5rem',
+          background: 'rgba(15, 23, 42, 0.7)',
+          padding: '0.35rem',
+          borderRadius: '12px',
+          marginBottom: '1.25rem',
+          border: '1px solid rgba(255, 255, 255, 0.08)'
+        }}>
+          <button
+            type="button"
+            onClick={() => setBookingMode('material')}
+            style={{
+              padding: '0.55rem 0.75rem',
+              borderRadius: '8px',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.4rem',
+              border: bookingMode === 'material' ? '1px solid #38bdf8' : 'none',
+              background: bookingMode === 'material' ? 'rgba(56, 189, 248, 0.2)' : 'transparent',
+              color: bookingMode === 'material' ? '#38bdf8' : '#94a3b8',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+          >
+            <span>📦 Book Materials</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setBookingMode('vehicle')}
+            style={{
+              padding: '0.55rem 0.75rem',
+              borderRadius: '8px',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.4rem',
+              border: bookingMode === 'vehicle' ? '1px solid #fb923c' : 'none',
+              background: bookingMode === 'vehicle' ? 'rgba(251, 146, 60, 0.2)' : 'transparent',
+              color: bookingMode === 'vehicle' ? '#fb923c' : '#94a3b8',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+          >
+            <span>🚛 Request Vehicle</span>
           </button>
         </div>
 
@@ -548,10 +693,12 @@ export default function DeliveryModal({
             </div>
 
             <h4 style={{ fontSize: '1.4rem', color: '#fff', marginBottom: '0.3rem', fontWeight: 800 }}>
-              Material Dispatch Booked!
+              {bookedDelivery.is_vehicle ? 'Vehicle Transport Requested!' : 'Material Dispatch Booked!'}
             </h4>
             <p style={{ color: '#94a3b8', fontSize: '0.86rem', marginBottom: '1.25rem' }}>
-              Your order has been registered at our Thilaspettai dispatch depot.
+              {bookedDelivery.is_vehicle
+                ? 'Your vehicle request has been registered at our Thilaspettai dispatch depot.'
+                : 'Your order has been registered at our Thilaspettai dispatch depot.'}
             </p>
             
             <div style={{
@@ -571,15 +718,27 @@ export default function DeliveryModal({
                 <span style={{ color: '#fff', fontWeight: 600 }}>{bookedDelivery.customer_name} ({bookedDelivery.customer_mobile})</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
-                <span style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Material & Quantity:</span>
-                <span style={{ color: '#fff', fontWeight: 700 }}>{bookedDelivery.quantity} {bookedDelivery.unit || form.unit}(s) of {bookedDelivery.material_name}</span>
+                <span style={{ color: '#94a3b8', fontSize: '0.84rem' }}>
+                  {bookedDelivery.is_vehicle ? 'Booked Vehicle:' : 'Material & Quantity:'}
+                </span>
+                <span style={{ color: '#fff', fontWeight: 700 }}>
+                  {bookedDelivery.is_vehicle
+                    ? `🚛 ${bookedDelivery.material_name} (1 Trip)`
+                    : `${bookedDelivery.quantity} ${bookedDelivery.unit || form.unit}(s) of ${bookedDelivery.material_name}`}
+                </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
-                <span style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Original Rate:</span>
-                <span style={{ color: '#fbbf24', fontWeight: 700 }}>₹{(bookedDelivery.original_price_rate || activeRate)?.toLocaleString('en-IN')} / {bookedDelivery.unit || form.unit}</span>
+                <span style={{ color: '#94a3b8', fontSize: '0.84rem' }}>
+                  {bookedDelivery.is_vehicle ? 'Trip Rate:' : 'Original Rate:'}
+                </span>
+                <span style={{ color: '#fbbf24', fontWeight: 700 }}>
+                  ₹{(bookedDelivery.original_price_rate || (bookedDelivery.is_vehicle ? activeVehicleObj.rate : activeRate))?.toLocaleString('en-IN')} / {bookedDelivery.unit || (bookedDelivery.is_vehicle ? 'Trip' : form.unit)}
+                </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
-                <span style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Est. Material Subtotal:</span>
+                <span style={{ color: '#94a3b8', fontSize: '0.84rem' }}>
+                  {bookedDelivery.is_vehicle ? 'Est. Trip Charge:' : 'Est. Material Subtotal:'}
+                </span>
                 <strong style={{ color: '#34d399', fontSize: '1rem' }}>₹{bookedDelivery.estimated_total?.toLocaleString('en-IN')}</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
@@ -714,154 +873,257 @@ export default function DeliveryModal({
               )}
             </div>
 
-            {/* Row 3: Material, Quantity, and Unit Switcher (Responsive Grid) */}
-            <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', 
-              gap: '0.75rem', 
-              marginBottom: '0.75rem' 
-            }}>
-              <div className="form-group" style={{ marginBottom: 0, gridColumn: 'span 2' }}>
-                <label className="form-label">
-                  Material <span style={{ color: '#ef4444' }}>*</span>
+            {/* CONDITIONAL SECTION: IF VEHICLE BOOKING, LIST VEHICLES ONLY; REMOVE MATERIAL, QUANTITY & UNIT */}
+            {bookingMode === 'vehicle' ? (
+              <div style={{ marginBottom: '1.25rem' }}>
+                <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                  <span style={{ fontWeight: 700, color: '#fff' }}>Select Transport Vehicle <span style={{ color: '#ef4444' }}>*</span></span>
+                  <span style={{ fontSize: '0.72rem', color: '#fb923c', fontWeight: 700 }}>STANDARD TRIP RATES</span>
                 </label>
-                <select
-                  className="form-control"
-                  value={form.material}
-                  onChange={(e) => handleChange('material', e.target.value)}
-                  onBlur={() => handleBlur('material')}
-                >
-                  {availableMaterials.map((m) => (
-                    <option key={m.id || m.name} value={m.name}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-                {errors.material && touched.material && (
-                  <div style={{ color: '#f87171', fontSize: '0.75rem', marginTop: '0.35rem' }}>
-                    {errors.material}
-                  </div>
-                )}
-              </div>
 
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">
-                  Quantity ({form.unit}s) <span style={{ color: '#ef4444' }}>*</span>
-                </label>
-                <input
-                  type="number"
-                  min="0.5"
-                  step="any"
-                  placeholder="e.g. 1"
-                  className={`form-control ${errors.quantity && touched.quantity ? 'input-error' : ''}`}
-                  value={form.quantity}
-                  onChange={(e) => handleChange('quantity', e.target.value)}
-                  onBlur={() => handleBlur('quantity')}
-                  style={{
-                    borderColor: (errors.quantity && touched.quantity) ? '#ef4444' : undefined,
-                    fontWeight: 700
-                  }}
-                />
-                {errors.quantity && touched.quantity && (
-                  <div style={{ color: '#f87171', fontSize: '0.75rem', marginTop: '0.35rem' }}>
-                    {errors.quantity}
-                  </div>
-                )}
-              </div>
-
-              {/* UNIT FIELD: USER CAN SWITCH TON OR UNIT */}
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Unit</label>
-                <select
-                  className="form-control"
-                  value={form.unit}
-                  onChange={(e) => handleChange('unit', e.target.value)}
-                  style={{
-                    fontWeight: 700,
-                    color: form.unit === 'Ton' ? '#fb923c' : '#38bdf8',
-                    background: 'rgba(15, 23, 42, 0.95)',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <option value="Unit">Unit</option>
-                  <option value="Ton">Ton</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Quick Quantity Select Buttons (Dynamic for Unit / Ton) */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '1.1rem', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600 }}>Quick {form.unit}s:</span>
-              {[1, 2, 3, 5, 10, 20].map(qty => (
-                <button
-                  key={qty}
-                  type="button"
-                  onClick={() => handleChange('quantity', qty.toString())}
-                  style={{
-                    padding: '0.22rem 0.65rem',
-                    borderRadius: '6px',
-                    fontSize: '0.74rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    border: form.quantity === qty.toString() ? '1px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.1)',
-                    background: form.quantity === qty.toString() ? 'rgba(56, 189, 248, 0.2)' : 'rgba(255, 255, 255, 0.04)',
-                    color: form.quantity === qty.toString() ? '#38bdf8' : '#cbd5e1',
-                    transition: 'all 0.2s'
-                  }}
-                >
-                  {qty} {form.unit}{qty > 1 ? 's' : ''}
-                </button>
-              ))}
-            </div>
-
-            {/* LIVE PRICE & ESTIMATE CARD (PER UNIT / TON) */}
-            <div style={{
-              background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.9))',
-              border: '1px solid rgba(59, 130, 246, 0.3)',
-              borderRadius: '12px',
-              padding: '0.9rem 1.1rem',
-              marginBottom: '1.25rem',
-              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.35)'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                  <Coins size={16} color="#fbbf24" />
-                  <span style={{ fontSize: '0.82rem', color: '#cbd5e1', fontWeight: 700 }}>
-                    {form.unit === 'Ton' ? 'Original Depot Rate (Per Ton):' : 'Original Depot Rate (Per Unit):'}
-                  </span>
+                {/* 3 FLEET VEHICLES LIST */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', marginBottom: '1.1rem' }}>
+                  {fleetVehicles.map((v) => {
+                    const isSelected = selectedVehicle === v.name || selectedVehicle === v.id;
+                    return (
+                      <div
+                        key={v.id}
+                        onClick={() => setSelectedVehicle(v.name)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.85rem',
+                          padding: '0.85rem',
+                          borderRadius: '12px',
+                          border: isSelected ? '2px solid #fb923c' : '1px solid rgba(255, 255, 255, 0.1)',
+                          background: isSelected ? 'rgba(251, 146, 60, 0.12)' : 'rgba(255, 255, 255, 0.03)',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          boxShadow: isSelected ? '0 0 16px rgba(251, 146, 60, 0.2)' : 'none'
+                        }}
+                      >
+                        <img
+                          src={v.image}
+                          alt={v.name}
+                          style={{
+                            width: '64px',
+                            height: '54px',
+                            borderRadius: '8px',
+                            objectFit: 'cover',
+                            border: isSelected ? '1px solid #fb923c' : '1px solid rgba(255, 255, 255, 0.1)',
+                            flexShrink: 0
+                          }}
+                          onError={(e) => { e.target.src = '/images/fleet.jpg'; }}
+                        />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                            <div style={{ fontWeight: 800, fontSize: '0.94rem', color: isSelected ? '#fff' : '#e2e8f0' }}>
+                              {v.name}
+                            </div>
+                            <div style={{
+                              fontSize: '0.92rem',
+                              fontWeight: 800,
+                              color: '#fbbf24',
+                              background: 'rgba(245, 158, 11, 0.15)',
+                              padding: '0.15rem 0.55rem',
+                              borderRadius: '6px',
+                              border: '1px solid rgba(245, 158, 11, 0.3)',
+                              flexShrink: 0
+                            }}>
+                              ₹{v.rate.toLocaleString('en-IN')} <span style={{ fontSize: '0.68rem', color: '#fde68a' }}>/ Trip</span>
+                            </div>
+                          </div>
+                          <div style={{ fontSize: '0.74rem', color: '#fb923c', fontWeight: 600, marginTop: '2px' }}>
+                            {v.type} • Capacity: {v.capacity}
+                          </div>
+                          <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {v.bestFor}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
+
+                {/* LIVE VEHICLE TRIP CHARGE SUMMARY */}
                 <div style={{
-                  fontSize: '0.92rem',
-                  fontWeight: 800,
-                  color: '#fbbf24',
-                  background: 'rgba(245, 158, 11, 0.15)',
-                  padding: '0.15rem 0.6rem',
-                  borderRadius: '6px',
-                  border: '1px solid rgba(245, 158, 11, 0.3)'
+                  background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.9))',
+                  border: '1px solid rgba(251, 146, 60, 0.35)',
+                  borderRadius: '12px',
+                  padding: '0.85rem 1.1rem',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  boxShadow: '0 4px 16px rgba(0, 0, 0, 0.35)'
                 }}>
-                  ₹{activeRate.toLocaleString('en-IN')} <span style={{ fontSize: '0.72rem', color: '#fde68a', fontWeight: 600 }}>/ {form.unit}</span>
+                  <div>
+                    <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#fff' }}>
+                      🚛 {activeVehicleObj.name}
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: '#10b981', fontWeight: 600, marginTop: '2px' }}>
+                      ✓ Direct quarry dispatch & experienced tipper operator
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase' }}>Trip Haulage Rate</div>
+                    <div style={{ fontSize: '1.35rem', fontWeight: 900, color: '#fb923c' }}>
+                      ₹{activeVehicleObj.rate.toLocaleString('en-IN')}
+                    </div>
+                  </div>
                 </div>
               </div>
+            ) : (
+              /* MATERIAL BOOKING MODE: Material Select, Quantity & Unit */
+              <>
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', 
+                  gap: '0.75rem', 
+                  marginBottom: '0.75rem' 
+                }}>
+                  <div className="form-group" style={{ marginBottom: 0, gridColumn: 'span 2' }}>
+                    <label className="form-label">
+                      Material <span style={{ color: '#ef4444' }}>*</span>
+                    </label>
+                    <select
+                      className="form-control"
+                      value={form.material}
+                      onChange={(e) => handleChange('material', e.target.value)}
+                      onBlur={() => handleBlur('material')}
+                    >
+                      {availableMaterials.map((m) => (
+                        <option key={m.id || m.name} value={m.name}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </select>
+                    {errors.material && touched.material && (
+                      <div style={{ color: '#f87171', fontSize: '0.75rem', marginTop: '0.35rem' }}>
+                        {errors.material}
+                      </div>
+                    )}
+                  </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.45rem', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                <div>
-                  <div style={{ fontSize: '0.76rem', color: '#94a3b8' }}>
-                    {numQuantity} {form.unit}(s) × ₹{activeRate.toLocaleString('en-IN')}
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">
+                      Quantity ({form.unit}s) <span style={{ color: '#ef4444' }}>*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="0.5"
+                      step="any"
+                      placeholder="e.g. 1"
+                      className={`form-control ${errors.quantity && touched.quantity ? 'input-error' : ''}`}
+                      value={form.quantity}
+                      onChange={(e) => handleChange('quantity', e.target.value)}
+                      onBlur={() => handleBlur('quantity')}
+                      style={{
+                        borderColor: (errors.quantity && touched.quantity) ? '#ef4444' : undefined,
+                        fontWeight: 700
+                      }}
+                    />
+                    {errors.quantity && touched.quantity && (
+                      <div style={{ color: '#f87171', fontSize: '0.75rem', marginTop: '0.35rem' }}>
+                        {errors.quantity}
+                      </div>
+                    )}
                   </div>
-                  <div style={{ fontSize: '0.72rem', color: '#10b981', fontWeight: 600 }}>
-                    {form.unit === 'Ton' ? '✓ Computerized Weighbridge Slip Included' : '✓ Standard Puducherry Yard Measurement Guaranteed'}
+
+                  {/* UNIT FIELD: USER CAN SWITCH TON OR UNIT */}
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Unit</label>
+                    <select
+                      className="form-control"
+                      value={form.unit}
+                      onChange={(e) => handleChange('unit', e.target.value)}
+                      style={{
+                        fontWeight: 700,
+                        color: form.unit === 'Ton' ? '#fb923c' : '#38bdf8',
+                        background: 'rgba(15, 23, 42, 0.95)',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <option value="Unit">Unit</option>
+                      <option value="Ton">Ton</option>
+                    </select>
                   </div>
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    Est. Material Subtotal
+
+                {/* Quick Quantity Select Buttons (Dynamic for Unit / Ton) */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '1.1rem', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600 }}>Quick {form.unit}s:</span>
+                  {[1, 2, 3, 5, 10, 20].map(qty => (
+                    <button
+                      key={qty}
+                      type="button"
+                      onClick={() => handleChange('quantity', qty.toString())}
+                      style={{
+                        padding: '0.22rem 0.65rem',
+                        borderRadius: '6px',
+                        fontSize: '0.74rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        border: form.quantity === qty.toString() ? '1px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.1)',
+                        background: form.quantity === qty.toString() ? 'rgba(56, 189, 248, 0.2)' : 'rgba(255, 255, 255, 0.04)',
+                        color: form.quantity === qty.toString() ? '#38bdf8' : '#cbd5e1',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      {qty} {form.unit}{qty > 1 ? 's' : ''}
+                    </button>
+                  ))}
+                </div>
+
+                {/* LIVE PRICE & ESTIMATE CARD (PER UNIT / TON) */}
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.9))',
+                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                  borderRadius: '12px',
+                  padding: '0.9rem 1.1rem',
+                  marginBottom: '1.25rem',
+                  boxShadow: '0 4px 16px rgba(0, 0, 0, 0.35)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                      <Coins size={16} color="#fbbf24" />
+                      <span style={{ fontSize: '0.82rem', color: '#cbd5e1', fontWeight: 700 }}>
+                        {form.unit === 'Ton' ? 'Original Depot Rate (Per Ton):' : 'Original Depot Rate (Per Unit):'}
+                      </span>
+                    </div>
+                    <div style={{
+                      fontSize: '0.92rem',
+                      fontWeight: 800,
+                      color: '#fbbf24',
+                      background: 'rgba(245, 158, 11, 0.15)',
+                      padding: '0.15rem 0.6rem',
+                      borderRadius: '6px',
+                      border: '1px solid rgba(245, 158, 11, 0.3)'
+                    }}>
+                      ₹{activeRate.toLocaleString('en-IN')} <span style={{ fontSize: '0.72rem', color: '#fde68a', fontWeight: 600 }}>/ {form.unit}</span>
+                    </div>
                   </div>
-                  <div style={{ fontSize: '1.28rem', fontWeight: 900, color: '#38bdf8' }}>
-                    ₹{estimatedSubtotal.toLocaleString('en-IN')}
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.45rem', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                    <div>
+                      <div style={{ fontSize: '0.76rem', color: '#94a3b8' }}>
+                        {numQuantity} {form.unit}(s) × ₹{activeRate.toLocaleString('en-IN')}
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: '#10b981', fontWeight: 600 }}>
+                        {form.unit === 'Ton' ? '✓ Computerized Weighbridge Slip Included' : '✓ Standard Puducherry Yard Measurement Guaranteed'}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Est. Material Subtotal
+                      </div>
+                      <div style={{ fontSize: '1.28rem', fontWeight: 900, color: '#38bdf8' }}>
+                        ₹{estimatedSubtotal.toLocaleString('en-IN')}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
+              </>
+            )}
 
             {/* Row 4: PREFERRED DATE & TIME SLOT (FUTURE / TODAY ONLY) */}
             <div style={{
@@ -1092,20 +1354,33 @@ export default function DeliveryModal({
               )}
             </div>
 
-            {/* Row 7: Vehicle Preference */}
-            <div className="form-group" style={{ marginBottom: '1.4rem' }}>
-              <label className="form-label">Vehicle Preference for Puducherry Access</label>
-              <select
-                className="form-control"
-                value={form.notes}
-                onChange={(e) => handleChange('notes', e.target.value)}
-              >
-                <option value="">Any suitable vehicle (Depot Supervisor will choose)</option>
-                <option value="Tractor (Narrow Street / 1-3 Tons)">Tractor (Narrow Street / 1-3 Tons)</option>
-                <option value="Mini Tipper Truck (Town / 3-5 Tons)">Mini Tipper Truck (Town / 3-5 Tons)</option>
-                <option value="Heavy Tipper Lorry (Bulk Haulage / 10-25 Tons)">Heavy Tipper Lorry (Bulk Haulage / 10-25 Tons)</option>
-              </select>
-            </div>
+            {/* Vehicle Preference (in material mode) OR Special Instructions (in vehicle mode) */}
+            {bookingMode === 'material' ? (
+              <div className="form-group" style={{ marginBottom: '1.4rem' }}>
+                <label className="form-label">Vehicle Preference for Puducherry Access</label>
+                <select
+                  className="form-control"
+                  value={form.notes}
+                  onChange={(e) => handleChange('notes', e.target.value)}
+                >
+                  <option value="">Any suitable vehicle (Depot Supervisor will choose)</option>
+                  <option value="Tractor (Narrow Street / 1-3 Tons)">Tractor (Narrow Street / 1-3 Tons)</option>
+                  <option value="Mini Tipper Truck (Town / 3-5 Tons)">Mini Tipper Truck (Town / 3-5 Tons)</option>
+                  <option value="Heavy Tipper Lorry (Bulk Haulage / 10-25 Tons)">Heavy Tipper Lorry (Bulk Haulage / 10-25 Tons)</option>
+                </select>
+              </div>
+            ) : (
+              <div className="form-group" style={{ marginBottom: '1.4rem' }}>
+                <label className="form-label">Special Trip / Site Landmark Instructions (Optional)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Unloading point, narrow lane entry landmark..."
+                  className="form-control"
+                  value={form.notes}
+                  onChange={(e) => handleChange('notes', e.target.value)}
+                />
+              </div>
+            )}
 
             {/* Submit Button */}
             <button
@@ -1118,15 +1393,25 @@ export default function DeliveryModal({
                 fontSize: '1rem',
                 fontWeight: 800,
                 justifyContent: 'center',
-                boxShadow: '0 8px 24px rgba(37, 99, 235, 0.4)'
+                boxShadow: bookingMode === 'vehicle' ? '0 8px 24px rgba(249, 115, 22, 0.4)' : '0 8px 24px rgba(37, 99, 235, 0.4)',
+                background: bookingMode === 'vehicle' ? 'linear-gradient(135deg, #ea580c, #f97316)' : undefined
               }}
             >
               <Truck size={18} />
-              <span>{loading ? 'Processing Dispatch...' : `Confirm Delivery Booking • ₹${estimatedSubtotal.toLocaleString('en-IN')}`}</span>
+              <span>
+                {loading 
+                  ? 'Processing Dispatch...' 
+                  : bookingMode === 'vehicle'
+                    ? `Request ${activeVehicleObj.name} • ₹${activeVehicleObj.rate.toLocaleString('en-IN')}`
+                    : `Confirm Delivery Booking • ₹${estimatedSubtotal.toLocaleString('en-IN')}`
+                }
+              </span>
             </button>
 
             <div style={{ textAlign: 'center', marginTop: '0.85rem', fontSize: '0.74rem', color: '#94a3b8' }}>
-              ✓ Computerized Weighbridge slip reading • Exact Tonnage Guaranteed
+              {bookingMode === 'vehicle' 
+                ? '✓ Direct Quarry-to-Site Dispatch • Experienced Hydraulic Tipper Operator' 
+                : '✓ Computerized Weighbridge slip reading • Exact Tonnage Guaranteed'}
             </div>
           </form>
         )}
