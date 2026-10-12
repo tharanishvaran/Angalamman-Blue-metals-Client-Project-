@@ -102,11 +102,13 @@ router.post('/admin', requireRole(['SUPER_ADMIN', 'ADMIN']), (req, res) => {
     const grand_total = Math.max(0, subtotal - parsedDiscount);
     const parsedPaid = Math.max(0, parseFloat(paid_amount) || 0);
 
-    let resolvedPaymentStatus = payment_status;
+    let resolvedPaymentStatus = 'Unpaid';
     if (parsedPaid >= grand_total && grand_total > 0) {
       resolvedPaymentStatus = 'Paid';
-    } else {
+    } else if (parsedPaid > 0) {
       resolvedPaymentStatus = 'Partial';
+    } else {
+      resolvedPaymentStatus = 'Unpaid';
     }
 
     const insertInvoice = db.prepare(`
@@ -180,15 +182,23 @@ router.put('/admin/:id/status', requireRole(['SUPER_ADMIN', 'ADMIN']), (req, res
     let newPaid = paid_amount !== undefined ? Math.max(0, parseFloat(paid_amount) || 0) : (current.paid_amount || 0);
     let newStatus = payment_status || current.payment_status;
 
-    if (paid_amount !== undefined && !payment_status) {
+    if (paid_amount !== undefined) {
       if (newPaid >= current.grand_total && current.grand_total > 0) {
         newStatus = 'Paid';
+      } else if (newPaid > 0) {
+        newStatus = 'Partial';
+      } else {
+        newStatus = 'Unpaid';
+      }
+    } else if (payment_status) {
+      if (payment_status === 'Paid') {
+        newPaid = current.grand_total;
+        newStatus = 'Paid';
+      } else if (payment_status === 'Unpaid') {
+        newPaid = 0;
+        newStatus = 'Unpaid';
       } else {
         newStatus = 'Partial';
-      }
-    } else if (payment_status === 'Paid') {
-      if (newPaid < current.grand_total) {
-        newPaid = current.grand_total;
       }
     }
 

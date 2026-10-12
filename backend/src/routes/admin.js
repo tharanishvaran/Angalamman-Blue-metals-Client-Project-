@@ -243,13 +243,18 @@ router.get('/notifications', requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF']), (re
 
     const items = [];
 
-    // Map deliveries (Booked Materials)
+    // Map deliveries (Booked Materials & Booked Vehicles)
     deliveries.forEach(del => {
+      const notesLow = (del.additional_notes || '').toLowerCase();
+      const matLow = (del.material_name || '').toLowerCase();
+      const isVehicle = del.unit === 'Trip' || notesLow.includes('vehicle') || matLow.includes('vehicle') || notesLow.includes('tractor') || notesLow.includes('tipper') || notesLow.includes('lorry');
+
       items.push({
         id: `del-${del.id}`,
-        type: 'MATERIAL_BOOKED',
-        badge: 'Material Booked',
-        badge_color: '#38bdf8',
+        type: isVehicle ? 'VEHICLE_BOOKED' : 'MATERIAL_BOOKED',
+        target_section: 'deliveries',
+        badge: isVehicle ? 'Vehicle Booked' : 'Material Booked',
+        badge_color: isVehicle ? '#c084fc' : '#38bdf8',
         reference_no: del.request_number,
         user_name: del.customer_name || 'Customer',
         mobile: del.customer_mobile || '',
@@ -262,7 +267,8 @@ router.get('/notifications', requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF']), (re
           unit: del.unit || 'Unit',
           preferred_date: del.preferred_date || 'Earliest dispatch',
           notes: del.additional_notes || '',
-          status: del.status || 'Pending'
+          status: del.status || 'Pending',
+          is_vehicle: isVehicle
         },
         created_at: formatUtcIso(del.created_at)
       });
@@ -273,7 +279,8 @@ router.get('/notifications', requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF']), (re
       items.push({
         id: `ord-${ord.id}`,
         type: 'MATERIAL_BOOKED',
-        badge: 'Order Placed',
+        target_section: 'deliveries',
+        badge: 'Material Booked',
         badge_color: '#38bdf8',
         reference_no: ord.request_number,
         user_name: ord.customer_name || 'Customer',
@@ -290,12 +297,13 @@ router.get('/notifications', requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF']), (re
       });
     });
 
-    // Map quotes (Booked Services / Quotes)
+    // Map quotes (Booked Services / Quotation Requests)
     quotes.forEach(q => {
       items.push({
         id: `quote-${q.id}`,
         type: 'SERVICE_BOOKED',
-        badge: 'Service / Quote Booked',
+        target_section: 'quotes',
+        badge: 'Service / Quotation Booked',
         badge_color: '#f59e0b',
         reference_no: q.request_number,
         user_name: q.customer_name || 'Customer',
@@ -314,7 +322,7 @@ router.get('/notifications', requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF']), (re
       });
     });
 
-    // Map user logins / signups
+    // Map user logins / account registrations
     customerLogins.forEach(ul => {
       const loginId = ul.login_id 
         ? `login-${ul.login_id}` 
@@ -322,7 +330,8 @@ router.get('/notifications', requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF']), (re
       items.push({
         id: loginId,
         type: 'USER_LOGIN',
-        badge: 'Customer Account Login',
+        target_section: 'customers',
+        badge: 'New User Login',
         badge_color: '#10b981',
         reference_no: `CUST-${ul.user_id}`,
         user_name: ul.customer_name || 'Customer',

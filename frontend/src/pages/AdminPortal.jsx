@@ -44,8 +44,31 @@ import {
 import BrandLogo from '../components/BrandLogo';
 import { api } from '../api';
 
-export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, onDataUpdated }) {
-  const [activeSection, setActiveSection] = useState('dashboard');
+export const formatDateDDMMYYYY = (dateInput) => {
+  if (!dateInput) return '';
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return String(dateInput);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
+export default function AdminPortal({ 
+  admin, 
+  onLogout, 
+  onClose, 
+  onViewInvoice, 
+  onDataUpdated,
+  initialSection = 'dashboard'
+}) {
+  const [activeSection, setActiveSection] = useState(initialSection || 'dashboard');
+
+  useEffect(() => {
+    if (initialSection) {
+      setActiveSection(initialSection);
+    }
+  }, [initialSection]);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [dashboardData, setDashboardData] = useState(null);
   const [materials, setMaterials] = useState([]);
@@ -446,7 +469,7 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
         ...billingForm,
         discount: parseFloat(billingForm.discount) || 0,
         paid_amount: paidVal,
-        payment_status: paidVal >= billingGrandTotal && billingGrandTotal > 0 ? 'Paid' : 'Partial'
+        payment_status: paidVal >= billingGrandTotal && billingGrandTotal > 0 ? 'Paid' : (paidVal > 0 ? 'Partial' : 'Unpaid')
       });
       setBillingSuccess(`Invoice ${res.invoice.invoice_number} generated successfully!`);
       loadAllAdminData();
@@ -480,7 +503,7 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
     if (!paymentModalInvoice) return;
     try {
       const paidVal = Math.max(0, parseFloat(paymentModalPaidAmount) || 0);
-      const newStatus = paidVal >= paymentModalInvoice.grand_total && paymentModalInvoice.grand_total > 0 ? 'Paid' : 'Partial';
+      const newStatus = paidVal >= paymentModalInvoice.grand_total && paymentModalInvoice.grand_total > 0 ? 'Paid' : (paidVal > 0 ? 'Partial' : 'Unpaid');
       await api.updateInvoicePaymentStatus(paymentModalInvoice.id, newStatus, paidVal);
       setPaymentModalOpen(false);
       setPaymentModalInvoice(null);
@@ -1324,7 +1347,7 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                             <td style={{ padding: '0.85rem 1rem' }}>
                               <div style={{ fontWeight: 800, color: '#38bdf8' }}>{del.request_number}</div>
                               <div style={{ color: '#64748b', fontSize: '0.74rem', marginTop: '3px' }}>
-                                {del.created_at ? new Date(del.created_at).toLocaleDateString('en-IN') : 'Recent'}
+                                {del.created_at ? formatDateDDMMYYYY(del.created_at) : 'Recent'}
                               </div>
                             </td>
 
@@ -1464,7 +1487,7 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                           <div>
                             <div style={{ fontWeight: 800, color: '#38bdf8', fontSize: '0.92rem' }}>{del.request_number}</div>
                             <div style={{ color: '#64748b', fontSize: '0.72rem', marginTop: '2px' }}>
-                              {del.created_at ? new Date(del.created_at).toLocaleDateString('en-IN') : 'Recent'}
+                              {del.created_at ? formatDateDDMMYYYY(del.created_at) : 'Recent'}
                             </div>
                           </div>
                           <span className={`badge ${del.status === 'Delivered' ? 'badge-green' : del.status === 'Cancelled' ? 'badge-red' : del.status === 'Out for Delivery' ? 'badge-blue' : 'badge-orange'}`} style={{ flexShrink: 0 }}>
@@ -1632,7 +1655,7 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                           <td style={{ padding: '0.85rem 1rem' }}>
                             <div style={{ fontWeight: 800, color: '#fb923c' }}>{q.request_number}</div>
                             <div style={{ color: '#64748b', fontSize: '0.74rem', marginTop: '3px' }}>
-                              {q.created_at ? new Date(q.created_at).toLocaleDateString('en-IN') : 'Recent'}
+                              {q.created_at ? formatDateDDMMYYYY(q.created_at) : 'Recent'}
                             </div>
                           </td>
 
@@ -1750,7 +1773,7 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                         <div>
                           <div style={{ fontWeight: 800, color: '#fb923c', fontSize: '0.92rem' }}>{q.request_number}</div>
                           <div style={{ color: '#64748b', fontSize: '0.72rem', marginTop: '2px' }}>
-                            {q.created_at ? new Date(q.created_at).toLocaleDateString('en-IN') : 'Recent'}
+                            {q.created_at ? formatDateDDMMYYYY(q.created_at) : 'Recent'}
                           </div>
                         </div>
                         <span className={`badge ${q.status === 'Converted' ? 'badge-green' : q.status === 'Closed' ? 'badge-red' : 'badge-orange'}`} style={{ flexShrink: 0 }}>
@@ -2355,7 +2378,7 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                               <div style={{ color: '#fff', fontWeight: 600 }}>{inv.customer_name}</div>
                               <div style={{ color: '#94a3b8', fontSize: '0.8rem' }}>{inv.customer_mobile}</div>
                             </td>
-                            <td style={{ padding: '0.85rem 1rem', color: '#94a3b8' }}>{new Date(inv.created_at).toLocaleDateString()}</td>
+                            <td style={{ padding: '0.85rem 1rem', color: '#94a3b8' }}>{formatDateDDMMYYYY(inv.created_at)}</td>
                             <td style={{ padding: '0.85rem 1rem', fontWeight: 700, color: '#fb923c' }}>
                               ₹{inv.grand_total.toLocaleString('en-IN')}
                             </td>
@@ -2415,7 +2438,7 @@ export default function AdminPortal({ admin, onLogout, onClose, onViewInvoice, o
                           <div>
                             <div style={{ fontWeight: 800, color: '#38bdf8', fontSize: '0.92rem' }}>{inv.invoice_number}</div>
                             <div style={{ color: '#64748b', fontSize: '0.72rem', marginTop: '2px' }}>
-                              {new Date(inv.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              {formatDateDDMMYYYY(inv.created_at)}
                             </div>
                           </div>
                           <span className={`badge ${inv.payment_status === 'Paid' ? 'badge-green' : inv.payment_status === 'Partial' ? 'badge-orange' : 'badge-red'}`}>

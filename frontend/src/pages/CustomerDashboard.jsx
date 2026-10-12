@@ -18,6 +18,16 @@ import {
 } from 'lucide-react';
 import { api } from '../api';
 
+const formatDateDDMMYYYY = (dateInput) => {
+  if (!dateInput) return '';
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return String(dateInput);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
 export default function CustomerDashboard({ 
   user, 
   admin,
@@ -595,7 +605,17 @@ export default function CustomerDashboard({
                         {inv.items ? inv.items.map(it => `${it.quantity} ${it.unit} ${it.material_name}`).join(', ') : 'Materials & Freight'}
                       </div>
                       <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '0.3rem' }}>
-                        Date: {new Date(inv.created_at).toLocaleDateString()}
+                        Date: <strong style={{ color: '#cbd5e1' }}>{formatDateDDMMYYYY(inv.created_at)}</strong>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.85rem', marginTop: '0.35rem', fontSize: '0.78rem' }}>
+                        <span style={{ color: '#34d399', fontWeight: 600 }}>
+                          Paid: ₹{(inv.paid_amount != null ? Number(inv.paid_amount) : (inv.payment_status === 'Paid' ? inv.grand_total : 0)).toLocaleString('en-IN')}
+                        </span>
+                        {Math.max(0, inv.grand_total - (inv.paid_amount != null ? Number(inv.paid_amount) : (inv.payment_status === 'Paid' ? inv.grand_total : 0))) > 0 && (
+                          <span style={{ color: '#f87171', fontWeight: 700 }}>
+                            Due: ₹{Math.max(0, inv.grand_total - (inv.paid_amount != null ? Number(inv.paid_amount) : (inv.payment_status === 'Paid' ? inv.grand_total : 0))).toLocaleString('en-IN')}
+                          </span>
+                        )}
                       </div>
                     </div>
 

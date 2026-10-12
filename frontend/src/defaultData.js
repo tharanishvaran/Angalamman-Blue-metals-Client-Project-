@@ -62,9 +62,9 @@ export const DEFAULT_MATERIALS = [
     id: 4,
     name: 'Sengal (Red Clay Bricks)',
     category: 'Bricks',
-    description: 'Kiln-fired high-density red clay bricks offering high compressive load strength and optimal thermal insulation.',
-    price: 9,
-    unit: 'Piece',
+    description: 'Kiln-fired high-density red clay bricks (~3,000 bricks per unit load) offering high compressive load strength and optimal thermal insulation.',
+    price: 25500,
+    unit: 'Unit',
     image_url: '/images/sengal.jpg',
     available: 1,
     display_order: 4

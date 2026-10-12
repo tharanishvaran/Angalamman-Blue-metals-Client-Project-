@@ -315,9 +315,9 @@ function initDatabase() {
       {
         name: 'Sengal (Red Bricks)',
         category: 'Bricks',
-        description: 'Top-grade kiln-burned red clay bricks with sharp edges, high compressive strength, and thermal efficiency.',
-        price: 8.50,
-        unit: 'Piece',
+        description: 'Top-grade kiln-burned red clay bricks (~3,000 bricks per unit load) with sharp edges, high compressive strength, and thermal efficiency.',
+        price: 25500,
+        unit: 'Unit',
         image_url: '/images/sengal.jpg',
         available: 1,
         display_order: 4

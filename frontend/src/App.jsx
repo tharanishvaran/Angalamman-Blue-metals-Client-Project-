@@ -61,6 +61,7 @@ export default function App() {
   // Admin Home Page Live Notifications State
   const [adminNotificationsOpen, setAdminNotificationsOpen] = useState(false);
   const [adminUnreadCount, setAdminUnreadCount] = useState(0);
+  const [adminInitialSection, setAdminInitialSection] = useState('dashboard');
 
   const ADMIN_EMAILS = [
     'tharanishvaranr@gmail.com',
@@ -104,6 +105,12 @@ export default function App() {
   const handleResetUnread = () => {
     localStorage.setItem('angalamman_last_read_notif', Date.now().toString());
     setAdminUnreadCount(0);
+  };
+
+  const handleOpenAdminSection = (section = 'dashboard') => {
+    setAdminInitialSection(section || 'dashboard');
+    setActiveView('admin-portal');
+    setAdminNotificationsOpen(false);
   };
 
   useEffect(() => {
@@ -283,6 +290,7 @@ export default function App() {
       {activeView === 'admin-portal' && admin ? (
         <AdminPortal
           admin={admin}
+          initialSection={adminInitialSection}
           onLogout={handleLogout}
           onClose={() => setActiveView('home')}
           onViewInvoice={(inv) => setViewingInvoice(inv)}
@@ -294,7 +302,7 @@ export default function App() {
           user={user}
           admin={admin}
           onClose={() => setActiveView('home')}
-          onOpenAdminPortal={() => setActiveView('admin-portal')}
+          onOpenAdminPortal={(sec) => handleOpenAdminSection(sec || 'dashboard')}
           onOpenQuote={() => handleOpenQuoteWithMaterial()}
           onOpenDelivery={() => handleOpenDeliveryWithMaterial()}
           onViewInvoice={(inv) => setViewingInvoice(inv)}
@@ -521,10 +529,7 @@ export default function App() {
         <AdminNotificationPanel
           isOpen={adminNotificationsOpen}
           onClose={() => setAdminNotificationsOpen(false)}
-          onOpenAdminPortal={() => {
-            setAdminNotificationsOpen(false);
-            setActiveView('admin-portal');
-          }}
+          onOpenAdminPortal={(targetSec) => handleOpenAdminSection(targetSec || 'dashboard')}
           unreadCount={adminUnreadCount}
           onResetUnread={handleResetUnread}
         />

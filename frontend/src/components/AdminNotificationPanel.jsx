@@ -123,7 +123,7 @@ export default function AdminNotificationPanel({
 
   // Filtered notifications
   const filtered = activeNotifications.filter(item => {
-    if (filter === 'MATERIAL' && item.type !== 'MATERIAL_BOOKED') return false;
+    if (filter === 'MATERIAL' && item.type !== 'MATERIAL_BOOKED' && item.type !== 'VEHICLE_BOOKED') return false;
     if (filter === 'SERVICE' && item.type !== 'SERVICE_BOOKED') return false;
     if (filter === 'LOGIN' && item.type !== 'USER_LOGIN') return false;
 
@@ -315,8 +315,8 @@ export default function AdminNotificationPanel({
         }}>
           {[
             { id: 'ALL', label: `All (${activeNotifications.length})` },
-            { id: 'MATERIAL', label: `🚚 Materials (${activeNotifications.filter(n => n.type === 'MATERIAL_BOOKED').length})` },
-            { id: 'SERVICE', label: `🏗️ Services (${activeNotifications.filter(n => n.type === 'SERVICE_BOOKED').length})` },
+            { id: 'MATERIAL', label: `🚚 Deliveries (${activeNotifications.filter(n => n.type === 'MATERIAL_BOOKED' || n.type === 'VEHICLE_BOOKED').length})` },
+            { id: 'SERVICE', label: `🏗️ Quotations (${activeNotifications.filter(n => n.type === 'SERVICE_BOOKED').length})` },
             { id: 'LOGIN', label: `👤 Logins (${activeNotifications.filter(n => n.type === 'USER_LOGIN').length})` }
           ].map(tab => (
             <button
@@ -411,14 +411,29 @@ export default function AdminNotificationPanel({
           ) : (
             filtered.map((item) => {
               const cleanMobile = getCleanMobile(item.mobile);
-              const isMaterial = item.type === 'MATERIAL_BOOKED';
+              const isMaterial = item.type === 'MATERIAL_BOOKED' || item.type === 'VEHICLE_BOOKED';
+              const isVehicle = item.type === 'VEHICLE_BOOKED' || item.details?.is_vehicle;
               const isService = item.type === 'SERVICE_BOOKED';
               const isLogin = item.type === 'USER_LOGIN';
+              const targetSection = item.target_section || (isMaterial ? 'deliveries' : isService ? 'quotes' : 'customers');
+              const actionLabel = isVehicle
+                ? 'Open Vehicle Booking in Site Deliveries'
+                : isMaterial
+                  ? 'Open Material Order in Site Deliveries'
+                  : isService
+                    ? 'Open in Quotation Requests'
+                    : 'Open in Customer Directory';
 
               return (
                 <div
                   key={item.id}
                   className="admin-notif-item-card"
+                  onClick={() => {
+                    if (onOpenAdminPortal) {
+                      onClose();
+                      onOpenAdminPortal(targetSection);
+                    }
+                  }}
                   style={{
                     flexShrink: 0,
                     minHeight: 'fit-content',
@@ -432,7 +447,8 @@ export default function AdminNotificationPanel({
                     padding: '0.9rem',
                     position: 'relative',
                     boxShadow: '0 4px 14px rgba(0, 0, 0, 0.35)',
-                    transition: 'transform 0.2s, border-color 0.2s'
+                    cursor: 'pointer',
+                    transition: 'transform 0.15s, border-color 0.15s, box-shadow 0.15s'
                   }}
                 >
                   {/* Top Bar: Badge, Timestamp & Dismiss X button */}
@@ -655,17 +671,18 @@ export default function AdminNotificationPanel({
                   {/* Action Link: Manage in Admin Portal */}
                   {onOpenAdminPortal && (
                     <button
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         onClose();
-                        onOpenAdminPortal();
+                        onOpenAdminPortal(targetSection);
                       }}
                       style={{
                         width: '100%',
-                        background: 'rgba(255, 255, 255, 0.04)',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
                         borderRadius: '6px',
-                        padding: '0.4rem',
-                        color: '#38bdf8',
+                        padding: '0.45rem',
+                        color: isVehicle ? '#c084fc' : isMaterial ? '#38bdf8' : isService ? '#fbbf24' : '#34d399',
                         fontSize: '0.74rem',
                         fontWeight: 700,
                         cursor: 'pointer',
@@ -675,10 +692,10 @@ export default function AdminNotificationPanel({
                         gap: '0.35rem',
                         transition: 'all 0.2s'
                       }}
-                      onMouseEnter={(e) => (e.target.style.background = 'rgba(56, 189, 248, 0.15)')}
-                      onMouseLeave={(e) => (e.target.style.background = 'rgba(255, 255, 255, 0.04)')}
+                      onMouseEnter={(e) => (e.target.style.background = 'rgba(255, 255, 255, 0.1)')}
+                      onMouseLeave={(e) => (e.target.style.background = 'rgba(255, 255, 255, 0.05)')}
                     >
-                      <span>Manage in Admin Portal</span>
+                      <span>{actionLabel}</span>
                       <ArrowRight size={12} />
                     </button>
                   )}
