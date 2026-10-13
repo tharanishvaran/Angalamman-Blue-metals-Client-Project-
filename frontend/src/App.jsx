@@ -19,6 +19,7 @@ import DeliveryModal from './components/DeliveryModal';
 import AuthModal from './components/AuthModal';
 import InvoiceViewModal from './components/InvoiceViewModal';
 import AdminNotificationPanel from './components/AdminNotificationPanel';
+import MyOrdersModal from './components/MyOrdersModal';
 
 // Dedicated Pages
 import CustomerDashboard from './pages/CustomerDashboard';
@@ -49,6 +50,7 @@ export default function App() {
   // Modals State
   const [quoteModalOpen, setQuoteModalOpen] = useState(false);
   const [deliveryModalOpen, setDeliveryModalOpen] = useState(false);
+  const [myOrdersModalOpen, setMyOrdersModalOpen] = useState(false);
   const [isVehicleModalMode, setIsVehicleModalMode] = useState(false);
   const [selectedVehicleForModal, setSelectedVehicleForModal] = useState('');
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -318,6 +320,7 @@ export default function App() {
             admin={admin}
             onOpenQuote={() => handleOpenQuoteWithMaterial()}
             onOpenDelivery={() => handleOpenDeliveryWithMaterial()}
+            onOpenOrders={() => setMyOrdersModalOpen(true)}
             onOpenAuth={() => {
               setAuthInitialMode('customer');
               setAuthModalOpen(true);
@@ -336,8 +339,11 @@ export default function App() {
           <main style={{ flex: 1 }}>
             <Hero
               settings={settings}
+              user={user}
+              admin={admin}
               onOpenQuote={() => handleOpenQuoteWithMaterial()}
               onOpenDelivery={() => handleOpenDeliveryWithMaterial()}
+              onOpenOrders={() => setMyOrdersModalOpen(true)}
             />
 
             <TrustStats />
@@ -522,6 +528,24 @@ export default function App() {
         invoice={viewingInvoice}
         business={settings}
         onClose={() => setViewingInvoice(null)}
+      />
+
+      {/* Customer My Orders Modal (Home Page) */}
+      <MyOrdersModal
+        isOpen={myOrdersModalOpen}
+        onClose={() => setMyOrdersModalOpen(false)}
+        user={user}
+        admin={admin}
+        onOpenDelivery={() => handleOpenDeliveryWithMaterial()}
+        onOpenQuote={() => handleOpenQuoteWithMaterial()}
+        onOpenDashboard={() => {
+          setMyOrdersModalOpen(false);
+          setActiveView('customer-dashboard');
+        }}
+        onViewInvoice={(inv) => {
+          setMyOrdersModalOpen(false);
+          setViewingInvoice(inv);
+        }}
       />
 
       {/* Admin Home Page Live Notifications Drawer */}

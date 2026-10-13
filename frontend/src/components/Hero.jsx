@@ -9,12 +9,13 @@ import {
   Clock,
   CheckCircle2,
   MapPin,
-  ExternalLink
+  ExternalLink,
+  Package
 } from 'lucide-react';
 import BrandLogo from './BrandLogo';
 import AnimatedSection from './AnimatedSection';
 
-export default function Hero({ settings, onOpenQuote, onOpenDelivery }) {
+export default function Hero({ settings, onOpenQuote, onOpenDelivery, user, admin, onOpenOrders }) {
   const primaryPhone = settings.phone_primary || '9944076675';
   const mapsUrl = settings.maps_url || 'https://maps.app.goo.gl/Z4SS6rkY7Vknzc3SA';
 
@@ -160,6 +161,25 @@ export default function Hero({ settings, onOpenQuote, onOpenDelivery }) {
                 <Truck size={18} />
                 <span>Book Site Delivery</span>
               </button>
+
+              {(user && !admin) && (
+                <button 
+                  onClick={onOpenOrders}
+                  className="btn btn-primary btn-lg btn-shimmer hero-orders-btn"
+                  style={{
+                    background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                    borderColor: 'rgba(56, 189, 248, 0.5)',
+                    boxShadow: '0 4px 16px rgba(2, 132, 199, 0.35)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}
+                  id="hero-my-orders-btn"
+                >
+                  <Package size={18} />
+                  <span>My Orders</span>
+                </button>
+              )}
 
               <a 
                 href={mapsUrl}

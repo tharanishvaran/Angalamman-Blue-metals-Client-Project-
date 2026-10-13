@@ -9,7 +9,8 @@ import {
   Truck, 
   LogOut,
   ChevronDown,
-  Bell
+  Bell,
+  Package
 } from 'lucide-react';
 import BrandLogo from './BrandLogo';
 
@@ -19,6 +20,7 @@ export default function Navbar({
   admin, 
   onOpenQuote, 
   onOpenDelivery,
+  onOpenOrders,
   onOpenAuth, 
   onOpenAdminAuth, 
   onOpenDashboard, 
@@ -244,6 +246,27 @@ export default function Navbar({
             <span>Site Delivery</span>
           </button>
 
+          {/* My Orders Button - Only for Logged In Customer Accounts (Not Admin) */}
+          {(user && !admin) && (
+            <button
+              onClick={onOpenOrders}
+              className="btn btn-outline btn-sm nav-my-orders-btn"
+              style={{ 
+                color: '#38bdf8', 
+                borderColor: 'rgba(56, 189, 248, 0.45)', 
+                background: 'rgba(56, 189, 248, 0.1)',
+                fontWeight: 600,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                whiteSpace: 'nowrap'
+              }}
+              title="View My Ordered Materials & Delivery Status"
+            >
+              <Package size={14} />
+              <span className="nav-my-orders-text">My Orders</span>
+            </button>
+          )}
 
           {/* User Account / Login */}
           {admin ? (
@@ -285,7 +308,7 @@ export default function Navbar({
                     <ShieldCheck size={14} />
                   </div>
                 )}
-                <span style={{ maxWidth: '110px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                <span className="nav-admin-name" style={{ maxWidth: '110px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
                   {admin.name ? admin.name.split(' ')[0] : 'Admin'}
                 </span>
                 <span style={{ fontSize: '0.62rem', background: '#dc2626', color: '#fff', padding: '0.1rem 0.4rem', borderRadius: '9999px', fontWeight: 700 }}>
@@ -350,7 +373,7 @@ export default function Navbar({
                       fontWeight: 600,
                       cursor: 'pointer',
                       borderRadius: '6px',
-                      marginTop: '0.4rem'
+                      marginTop: '0.3rem'
                     }}
                   >
                     <ShieldCheck size={16} /> Open Admin Portal
@@ -420,7 +443,7 @@ export default function Navbar({
                     {(user.name || user.email || 'U').charAt(0).toUpperCase()}
                   </div>
                 )}
-                <span style={{ maxWidth: '110px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span className="nav-user-name" style={{ maxWidth: '110px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {user.name ? user.name.split(' ')[0] : 'Customer'}
                 </span>
                 <ChevronDown size={14} />
@@ -460,6 +483,33 @@ export default function Navbar({
                       <div style={{ fontSize: '0.72rem', color: '#94a3b8', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>{user.email}</div>
                     </div>
                   </div>
+                  <button
+                    onClick={() => {
+                      setUserDropdownOpen(false);
+                      onOpenOrders();
+                    }}
+                    style={{
+                      width: '100%',
+                      textAlign: 'left',
+                      background: 'rgba(56, 189, 248, 0.1)',
+                      border: '1px solid rgba(56, 189, 248, 0.25)',
+                      color: '#38bdf8',
+                      padding: '0.5rem 0.65rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      borderRadius: '6px',
+                      marginTop: '0.3rem',
+                      marginBottom: '0.2rem'
+                    }}
+                    onMouseEnter={(e) => (e.target.style.background = 'rgba(56, 189, 248, 0.18)')}
+                    onMouseLeave={(e) => (e.target.style.background = 'rgba(56, 189, 248, 0.1)')}
+                  >
+                    <Package size={15} /> My Orders
+                  </button>
                   <button
                     onClick={() => {
                       setUserDropdownOpen(false);
@@ -758,27 +808,50 @@ export default function Navbar({
                 </div>
               </div>
             ) : user ? (
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
                 <button
                   onClick={() => {
                     setMobileMenuOpen(false);
-                    onOpenDashboard();
+                    if (onOpenOrders) onOpenOrders();
                   }}
                   className="btn btn-outline"
-                  style={{ flex: 1, justifyContent: 'center' }}
-                >
-                  <User size={15} /> Dashboard
-                </button>
-                <button
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    onLogout();
+                  style={{
+                    width: '100%',
+                    justifyContent: 'center',
+                    borderColor: 'rgba(56, 189, 248, 0.45)',
+                    background: 'rgba(56, 189, 248, 0.12)',
+                    color: '#38bdf8',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.45rem',
+                    padding: '0.65rem'
                   }}
-                  className="btn btn-outline"
-                  style={{ borderColor: 'rgba(239, 68, 68, 0.3)', color: '#f87171' }}
                 >
-                  <LogOut size={15} />
+                  <Package size={16} /> My Orders
                 </button>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      onOpenDashboard();
+                    }}
+                    className="btn btn-outline"
+                    style={{ flex: 1, justifyContent: 'center' }}
+                  >
+                    <User size={15} /> Dashboard
+                  </button>
+                  <button
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      onLogout();
+                    }}
+                    className="btn btn-outline"
+                    style={{ borderColor: 'rgba(239, 68, 68, 0.3)', color: '#f87171' }}
+                  >
+                    <LogOut size={15} />
+                  </button>
+                </div>
               </div>
             ) : (
               <button
@@ -807,6 +880,32 @@ export default function Navbar({
           }
           .nav-brand-sub {
             font-size: 0.62rem !important;
+          }
+          .nav-my-orders-btn {
+            padding: 0.32rem 0.6rem !important;
+            font-size: 0.78rem !important;
+            gap: 0.28rem !important;
+          }
+        }
+        @media (max-width: 480px) {
+          .nav-brand-title {
+            font-size: 0.94rem !important;
+          }
+          .nav-user-name, .nav-admin-name {
+            max-width: 60px !important;
+            font-size: 0.8rem !important;
+          }
+          .nav-my-orders-btn {
+            padding: 0.3rem 0.5rem !important;
+            font-size: 0.75rem !important;
+          }
+        }
+        @media (max-width: 380px) {
+          .nav-user-name, .nav-admin-name {
+            display: none !important;
+          }
+          .nav-my-orders-text {
+            font-size: 0.72rem !important;
           }
         }
         @media (min-width: 1140px) {
