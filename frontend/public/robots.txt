@@ -3,4 +3,4 @@ Allow: /
 Disallow: /admin
 Disallow: /api/
 
-Sitemap: https://sriangalammanbluemetals.com/sitemap.xml
+Sitemap: https://angalamman-blue-metals.onrender.com/sitemap.xml
