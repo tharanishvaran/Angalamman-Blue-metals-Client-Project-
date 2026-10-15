@@ -1,6 +1,24 @@
+# robots.txt — Sri Angalamman Blue Metals
+# https://angalamman-blue-metals.onrender.com/
+
 User-agent: *
 Allow: /
-Disallow: /admin
-Disallow: /api/
+Allow: /images/
+Allow: /logo.png
 
+# Protect private/admin routes from indexing
+Disallow: /admin
+Disallow: /admin/
+Disallow: /api/
+Disallow: /api
+
+# Do not index authentication/portal pages (handled client-side)
+Disallow: /*?*admin=
+Disallow: /*?*token=
+
+# Crawl-delay for non-Google bots (optional, prevents overload)
+Crawl-delay: 2
+
+# Sitemap location
 Sitemap: https://angalamman-blue-metals.onrender.com/sitemap.xml
+

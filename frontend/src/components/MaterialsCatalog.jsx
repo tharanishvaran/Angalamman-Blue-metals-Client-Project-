@@ -29,7 +29,7 @@ export default function MaterialsCatalog({
   });
 
   return (
-    <section id="materials" className="section-padding" style={{ background: 'rgba(8, 16, 32, 0.5)', position: 'relative' }}>
+    <section id="materials" className="section-padding" aria-label="Construction Materials Catalogue – Blue Metal, M-Sand, P-Sand, River Sand, Bricks in Pondicherry" style={{ background: 'rgba(8, 16, 32, 0.5)', position: 'relative' }}>
       <div className="container">
         
         {/* Header */}
@@ -42,7 +42,7 @@ export default function MaterialsCatalog({
             Premium Construction <span className="gradient-text">Materials Catalogue</span>
           </h2>
           <p className="section-desc">
-            Direct supply from quarry crushing plants with calibrated sieve analysis, high bulk density, and zero contamination.
+            Direct supply of blue metal aggregates (20mm, 40mm, 12mm, 6mm), M-Sand, P-Sand, River Sand, Sengal bricks, gravel, and crusher powder from quarry crushing plants in Pondicherry. Calibrated sieve analysis, high bulk density, and zero contamination.
           </p>
 
           {/* Filter Bar & Search */}
@@ -142,7 +142,7 @@ export default function MaterialsCatalog({
               <div className="card-img-zoom" style={{ position: 'relative', height: '195px', overflow: 'hidden', background: '#091224' }}>
                 <img 
                   src={material.image_url || '/images/hero.jpg'} 
-                  alt={material.name}
+                  alt={`${material.name} – ${material.category} supplier in Pondicherry | Sri Angalamman Blue Metals`}
                   style={{
                     width: '100%',
                     height: '100%',

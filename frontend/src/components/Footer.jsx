@@ -67,7 +67,7 @@ export default function Footer({ settings, onOpenAuth, onOpenAdminAuth }) {
             </div>
 
             <p style={{ fontSize: '0.88rem', color: '#94a3b8', lineHeight: 1.6, marginBottom: '1.25rem' }}>
-              "Quality Materials for a Stronger Tomorrow." Supplying premium certified crusher aggregates, sands, and site logistics for residential and commercial construction across Puducherry.
+              "Quality Materials for a Stronger Tomorrow." Sri Angalamman Blue Metals — trusted blue metal suppliers in Pondicherry supplying M-Sand, P-Sand, River Sand, 20mm &amp; 40mm aggregates, Sengal bricks, gravel, and crusher powder with direct site tipper delivery across Puducherry.
             </p>
 
             <div style={{ fontSize: '0.78rem', color: '#64748b' }}>

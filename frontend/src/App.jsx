@@ -7,6 +7,7 @@ import MaterialsCatalog from './components/MaterialsCatalog';
 import Services from './components/Services';
 import VehiclesFleet from './components/VehiclesFleet';
 import WhyChooseUs from './components/WhyChooseUs';
+import SEOFaqSection from './components/SEOFaqSection';
 import ReviewsSection from './components/ReviewsSection';
 import LocationContact from './components/LocationContact';
 import Footer from './components/Footer';
@@ -370,6 +371,8 @@ export default function App() {
             />
 
             <WhyChooseUs />
+
+            <SEOFaqSection />
 
             <ReviewsSection
               reviews={reviews}

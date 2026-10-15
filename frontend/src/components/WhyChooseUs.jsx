@@ -44,7 +44,7 @@ export default function WhyChooseUs() {
   ];
 
   return (
-    <section id="why-choose-us" className="section-padding" style={{ background: 'rgba(7, 14, 27, 0.75)', position: 'relative' }}>
+    <section id="why-choose-us" className="section-padding" aria-label="Why Choose Sri Angalamman Blue Metals – Best Blue Metal Supplier in Pondicherry" style={{ background: 'rgba(7, 14, 27, 0.75)', position: 'relative' }}>
       <div className="container">
         
         {/* Header */}
@@ -56,7 +56,7 @@ export default function WhyChooseUs() {
             Why Builders Choose <span className="gradient-text">Our Materials</span>
           </h2>
           <p className="section-desc">
-            We provide the solid foundation for homes, commercial complexes, and infrastructure across the Union Territory of Puducherry.
+            We provide the solid foundation for homes, commercial complexes, and infrastructure across the Union Territory of Puducherry. From weighbridge-certified M-Sand and P-Sand to quarry-direct 20mm and 40mm blue metal aggregates — quality and reliability are our promise.
           </p>
         </AnimatedSection>
 

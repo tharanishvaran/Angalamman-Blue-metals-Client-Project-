@@ -25,7 +25,7 @@ const iconMap = {
 
 export default function Services({ services = [], onSelectServiceQuote }) {
   return (
-    <section id="services" className="section-padding" style={{ position: 'relative' }}>
+    <section id="services" className="section-padding" aria-label="Construction Material Supply and Delivery Services in Pondicherry – Sri Angalamman Blue Metals" style={{ position: 'relative' }}>
       <div className="container">
         
         {/* Header */}
@@ -37,7 +37,7 @@ export default function Services({ services = [], onSelectServiceQuote }) {
             Our Construction & <span className="gradient-text">Logistics Services</span>
           </h2>
           <p className="section-desc">
-            Complete supply-chain coverage for Puducherry builders: from raw aggregates and plaster sand to heavy tipper site transportation.
+            Complete supply-chain coverage for Puducherry builders: from raw blue metal aggregates and plaster sand to heavy tipper site transportation. We serve individual home builders, civil contractors, and infrastructure companies across Pondicherry.
           </p>
         </AnimatedSection>
 

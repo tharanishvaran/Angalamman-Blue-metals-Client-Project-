@@ -46,7 +46,7 @@ export default function About({ settings, onOpenDelivery }) {
   ];
 
   return (
-    <section id="about" className="section-padding" style={{ position: 'relative' }}>
+    <section id="about" className="section-padding" aria-label="About Sri Angalamman Blue Metals – Construction Material Supplier in Puducherry" style={{ position: 'relative' }}>
       <div className="container">
         
         {/* Header */}
@@ -85,7 +85,7 @@ export default function About({ settings, onOpenDelivery }) {
             >
               <img 
                 src={settings.about_image || '/images/about.jpg'} 
-                alt="Sri Angalamman Transport Fleet" 
+                alt="Sri Angalamman Blue Metals transport fleet and material yard in Thilaspettai, Puducherry — blue metal and sand supplier" 
                 loading="lazy"
                 onError={(e) => {
                   if (!e.target.dataset.fallback) {

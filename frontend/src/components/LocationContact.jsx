@@ -71,7 +71,7 @@ export default function LocationContact({ settings, onOpenQuote, user, onRequire
   };
 
   return (
-    <section id="contact" className="section-padding" style={{ background: 'rgba(8, 16, 34, 0.65)', position: 'relative' }}>
+    <section id="contact" className="section-padding" aria-label="Contact Sri Angalamman Blue Metals – Blue Metal Supplier Yard Location in Thilaspettai, Puducherry" style={{ background: 'rgba(8, 16, 34, 0.65)', position: 'relative' }}>
       <div className="container">
         
         {/* Header */}
@@ -81,10 +81,10 @@ export default function LocationContact({ settings, onOpenQuote, user, onRequire
             <span>Puducherry Yard Location & Hotline</span>
           </div>
           <h2 className="section-title">
-            Visit Our Yard or <span className="gradient-text">Contact Our Dispatch</span>
+            Visit Our <span className="gradient-text">Thilaspettai Yard</span> or Contact Us
           </h2>
           <p className="section-desc">
-            Directly located in Thilaspettai, Puducherry. Connect with our materials supervisor for instant availability and dispatch schedule.
+            Sri Angalamman Blue Metals yard is located in Sathiyamoorthy Nagar, Thilaspettai, Puducherry. Call, WhatsApp, or visit directly for blue metal prices, M-Sand, P-Sand, and site delivery bookings across Pondicherry.
           </p>
         </AnimatedSection>
 
