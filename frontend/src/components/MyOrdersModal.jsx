@@ -87,6 +87,8 @@ export default function MyOrdersModal({
       material: d.material_name,
       quantity: d.quantity,
       unit: d.unit || 'Load',
+      city: d.city || 'Pondicherry',
+      transportCharge: d.transport_charge || 0,
       address: d.delivery_address,
       preferredDate: d.preferred_date,
       status: d.status || 'Pending',
@@ -596,6 +598,11 @@ export default function MyOrdersModal({
                             #{order.number}
                           </span>
                           {getStatusBadge(order.status)}
+                          {order.city && (
+                            <span className={`badge ${order.city === 'Villupuram' ? 'badge-blue' : order.city === 'Tindivanam' ? 'badge-orange' : 'badge-green'}`} style={{ fontSize: '0.72rem', padding: '0.15rem 0.5rem' }}>
+                              📍 {order.city} {order.transportCharge > 0 ? `(+₹${Number(order.transportCharge).toLocaleString('en-IN')})` : ''}
+                            </span>
+                          )}
                         </div>
 
                         <div style={{ fontSize: '0.78rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>

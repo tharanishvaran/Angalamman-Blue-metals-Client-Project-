@@ -21,6 +21,9 @@ export const DEFAULT_SETTINGS = {
   vehicle_tractor_rate: 1200,
   vehicle_tipper_rate: 1800,
   vehicle_lorry_rate: 3500,
+  transport_charge_villupuram: 1000,
+  transport_charge_tindivanam: 1000,
+  transport_charge_pondicherry: 0,
   logo_text: 'Sri Angalamman Blue Metals'
 };
 
@@ -209,5 +212,34 @@ export const DEFAULT_REVIEWS = [
     rating: 5,
     comment: 'Direct quarry prices without middlemen. Ordered 12 loads of 40mm ballast and crusher powder for our site in Villianur. Highly dependable team.',
     created_at: '2026-04-02'
+  },
+  {
+    id: 4,
+    customer_name: 'Er. K. Sivakumar (Structural Consultant & Builder, Lawspet)',
+    rating: 4.8,
+    comment: 'Sourced over 18 loads of 20mm blue metal and river sand for our G+3 commercial project near Lawspet. Aggregate crushing strength and sieve grading passed all structural lab tests. Excellent dispatch coordination.',
+    created_at: '2026-04-05'
+  },
+  {
+    id: 5,
+    customer_name: 'M. Radhakrishnan (Govt. Licensed Civil Contractor, Villianur)',
+    rating: 4.5,
+    comment: 'Sri Angalamman Blue Metals has the most reliable fleet of hydraulic tippers and tractors in Puducherry. Weight slips matched our electronic weighbridge calibrations 100%. Highly recommended for M-Sand and kraval filling.',
+    created_at: '2026-04-08'
+  },
+  {
+    id: 6,
+    customer_name: 'Ar. Priya Sundaram (Principal Architect, Heritage Pondy Projects)',
+    rating: 4.8,
+    comment: 'Their triple-washed P-Sand and high-grade Sengal red clay bricks gave our heritage restoration site clean finishes with zero plaster efflorescence. Instant PDF quotation and prompt dispatch support made billing very smooth.',
+    created_at: '2026-04-10'
+  },
+  {
+    id: 7,
+    customer_name: 'G. Murugan (Murugan Infrastructures & Developers)',
+    rating: 4,
+    comment: 'Very competitive quarry-direct prices for 40mm ballast and crusher dust in bulk loads. Transparent billing without hidden freight surcharges. Ideal supplier for foundation work and concrete road metalling across Puducherry.',
+    created_at: '2026-04-12'
   }
 ];
+

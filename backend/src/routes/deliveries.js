@@ -18,6 +18,8 @@ router.post('/', authenticate, (req, res) => {
       material_name,
       quantity,
       unit,
+      city,
+      transport_charge,
       delivery_address,
       location_link,
       preferred_date,
@@ -51,11 +53,14 @@ router.post('/', authenticate, (req, res) => {
       if (userRow) user_id = userRow.id;
     }
 
+    const resolvedCity = (city && city.trim()) ? city.trim() : 'Pondicherry';
+    const resolvedTransportCharge = parseFloat(transport_charge) || 0;
+
     const stmt = db.prepare(`
       INSERT INTO delivery_requests (
         request_number, user_id, customer_name, customer_mobile, customer_email,
-        material_name, quantity, unit, delivery_address, preferred_date, additional_notes, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')
+        material_name, quantity, unit, city, transport_charge, delivery_address, preferred_date, additional_notes, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')
     `);
 
     const result = stmt.run(
@@ -67,6 +72,8 @@ router.post('/', authenticate, (req, res) => {
       material_name,
       parseFloat(quantity),
       unit || 'Unit',
+      resolvedCity,
+      resolvedTransportCharge,
       resolvedAddress,
       preferred_date || null,
       additional_notes ? additional_notes.trim() : null

@@ -8,8 +8,8 @@ function generateQuoteNumber() {
   return `QTE-${Date.now().toString().slice(-4)}${rand}`;
 }
 
-// Customer / Authenticated User: Create Quote Request
-router.post('/', authenticate, (req, res) => {
+// Customer / Authenticated User or Guest: Create Quote Request
+router.post('/', optionalAuthenticate, (req, res) => {
   try {
     const {
       customer_name,

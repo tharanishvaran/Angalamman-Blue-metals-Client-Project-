@@ -26,8 +26,8 @@ router.post('/', optionalAuthenticate, (req, res) => {
       return res.status(400).json({ error: 'Customer name, rating, and feedback are required' });
     }
 
-    const parsedRating = parseInt(rating);
-    if (parsedRating < 1 || parsedRating > 5) {
+    const parsedRating = parseFloat(rating);
+    if (isNaN(parsedRating) || parsedRating < 1 || parsedRating > 5) {
       return res.status(400).json({ error: 'Rating must be between 1 and 5 stars' });
     }
 

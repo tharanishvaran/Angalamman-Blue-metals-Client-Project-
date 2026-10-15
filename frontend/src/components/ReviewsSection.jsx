@@ -85,16 +85,53 @@ export default function ReviewsSection({ reviews = [], onReviewSubmitted, user }
               }}
             >
               <div>
-                {/* Stars */}
-                <div style={{ display: 'flex', gap: '5px', marginBottom: '1.25rem' }}>
-                  {[...Array(5)].map((_, i) => (
-                    <Star
-                      key={i}
-                      size={18}
-                      fill={i < rev.rating ? '#f59e0b' : 'none'}
-                      color={i < rev.rating ? '#f59e0b' : '#475569'}
-                    />
-                  ))}
+                {/* Stars & Score Badge */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+                  <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                    {[0, 1, 2, 3, 4].map((i) => {
+                      const score = Number(rev.rating) || 5;
+                      const fillPercent = Math.max(0, Math.min(1, score - i));
+                      return (
+                        <span key={i} style={{ position: 'relative', display: 'inline-block', width: '18px', height: '18px' }}>
+                          <Star
+                            size={18}
+                            color="#475569"
+                            fill="none"
+                            style={{ position: 'absolute', left: 0, top: 0 }}
+                          />
+                          {fillPercent > 0 && (
+                            <span style={{
+                              position: 'absolute',
+                              left: 0,
+                              top: 0,
+                              width: `${Math.round(fillPercent * 100)}%`,
+                              overflow: 'hidden',
+                              display: 'inline-block',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              <Star size={18} color="#f59e0b" fill="#f59e0b" />
+                            </span>
+                          )}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  <span style={{
+                    background: 'rgba(245, 158, 11, 0.12)',
+                    border: '1px solid rgba(245, 158, 11, 0.35)',
+                    color: '#fbbf24',
+                    padding: '0.2rem 0.6rem',
+                    borderRadius: '8px',
+                    fontSize: '0.82rem',
+                    fontWeight: 800,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    letterSpacing: '0.02em',
+                    boxShadow: '0 2px 8px rgba(245, 158, 11, 0.15)'
+                  }}>
+                    ★ {Number(rev.rating).toFixed(1)}
+                  </span>
                 </div>
 
                 <p style={{

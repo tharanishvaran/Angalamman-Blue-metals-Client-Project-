@@ -103,6 +103,8 @@ function initDatabase() {
       material_name TEXT NOT NULL,
       quantity REAL NOT NULL,
       unit TEXT DEFAULT 'Load',
+      city TEXT DEFAULT 'Pondicherry',
+      transport_charge REAL DEFAULT 0,
       delivery_address TEXT NOT NULL,
       preferred_date TEXT,
       additional_notes TEXT,
@@ -212,6 +214,18 @@ function initDatabase() {
     // Column already exists
   }
 
+  try {
+    db.prepare("ALTER TABLE delivery_requests ADD COLUMN city TEXT DEFAULT 'Pondicherry'").run();
+  } catch (e) {
+    // Column already exists
+  }
+
+  try {
+    db.prepare('ALTER TABLE delivery_requests ADD COLUMN transport_charge REAL DEFAULT 0').run();
+  } catch (e) {
+    // Column already exists
+  }
+
   // Seed / Ensure angalammanbluemetalspondy@gmail.com & sriangalammanbluemetalspondy@gmail.com are Super Admins
   const targetAdminEmails = [
     'angalammanbluemetalspondy@gmail.com',
@@ -272,7 +286,10 @@ function initDatabase() {
     ['logo_text', 'Sri Angalamman Blue Metals'],
     ['vehicle_tractor_rate', '1200'],
     ['vehicle_tipper_rate', '1800'],
-    ['vehicle_lorry_rate', '3500']
+    ['vehicle_lorry_rate', '3500'],
+    ['transport_charge_villupuram', '1000'],
+    ['transport_charge_tindivanam', '1000'],
+    ['transport_charge_pondicherry', '0']
   ];
 
   const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
@@ -479,31 +496,58 @@ function initDatabase() {
   }
 
   // Seed sample approved reviews
-  const reviewCount = db.prepare('SELECT COUNT(*) as count FROM reviews').get();
-  if (reviewCount.count === 0) {
-    const sampleReviews = [
-      {
-        customer_name: 'V. Ramanathan (Civil Contractor, Lawspet)',
-        rating: 5,
-        comment: 'Sri Angalamman Blue Metals delivers accurate weighbridge loads without delays. Their 3/4 stone and M-Sand quality gave our residential concrete mix superb compressive strength.',
-        is_approved: 1
-      },
-      {
-        customer_name: 'S. Jayakumar (Home Builder, Thilaspettai)',
-        rating: 5,
-        comment: 'Ordered 4 loads of P-Sand and Sengal bricks for my independent house construction. Delivered directly inside the narrow street using their tractor trolley on the exact promised morning!',
-        is_approved: 1
-      },
-      {
-        customer_name: 'M. Anand (Site Engineer, Villianur)',
-        rating: 5,
-        comment: 'Very professional management in Puducherry. Clean crusher dust, fair pricing without hidden transport charges, and polite drivers. Highly recommended for commercial builders.',
-        is_approved: 1
-      }
-    ];
-    const insertRev = db.prepare('INSERT INTO reviews (customer_name, rating, comment, is_approved) VALUES (?, ?, ?, ?)');
-    sampleReviews.forEach(r => insertRev.run(r.customer_name, r.rating, r.comment, r.is_approved));
-  }
+  const sampleReviews = [
+    {
+      customer_name: 'V. Ramanathan (Civil Contractor, Lawspet)',
+      rating: 5,
+      comment: 'Sri Angalamman Blue Metals delivers accurate weighbridge loads without delays. Their 3/4 stone and M-Sand quality gave our residential concrete mix superb compressive strength.',
+      is_approved: 1
+    },
+    {
+      customer_name: 'S. Jayakumar (Home Builder, Thilaspettai)',
+      rating: 5,
+      comment: 'Ordered 4 loads of P-Sand and Sengal bricks for my independent house construction. Delivered directly inside the narrow street using their tractor trolley on the exact promised morning!',
+      is_approved: 1
+    },
+    {
+      customer_name: 'M. Anand (Site Engineer, Villianur)',
+      rating: 5,
+      comment: 'Very professional management in Puducherry. Clean crusher dust, fair pricing without hidden transport charges, and polite drivers. Highly recommended for commercial builders.',
+      is_approved: 1
+    },
+    {
+      customer_name: 'Er. K. Sivakumar (Structural Consultant & Builder, Lawspet)',
+      rating: 4.8,
+      comment: 'Sourced over 18 loads of 20mm blue metal and river sand for our G+3 commercial project near Lawspet. Aggregate crushing strength and sieve grading passed all structural lab tests. Excellent dispatch coordination.',
+      is_approved: 1
+    },
+    {
+      customer_name: 'M. Radhakrishnan (Govt. Licensed Civil Contractor, Villianur)',
+      rating: 4.5,
+      comment: 'Sri Angalamman Blue Metals has the most reliable fleet of hydraulic tippers and tractors in Puducherry. Weight slips matched our electronic weighbridge calibrations 100%. Highly recommended for M-Sand and kraval filling.',
+      is_approved: 1
+    },
+    {
+      customer_name: 'Ar. Priya Sundaram (Principal Architect, Heritage Pondy Projects)',
+      rating: 4.8,
+      comment: 'Their triple-washed P-Sand and high-grade Sengal red clay bricks gave our heritage restoration site clean finishes with zero plaster efflorescence. Instant PDF quotation and prompt dispatch support made billing very smooth.',
+      is_approved: 1
+    },
+    {
+      customer_name: 'G. Murugan (Murugan Infrastructures & Developers)',
+      rating: 4,
+      comment: 'Very competitive quarry-direct prices for 40mm ballast and crusher dust in bulk loads. Transparent billing without hidden freight surcharges. Ideal supplier for foundation work and concrete road metalling across Puducherry.',
+      is_approved: 1
+    }
+  ];
+
+  const checkRev = db.prepare('SELECT id FROM reviews WHERE customer_name = ?');
+  const insertRev = db.prepare('INSERT INTO reviews (customer_name, rating, comment, is_approved) VALUES (?, ?, ?, ?)');
+  sampleReviews.forEach(r => {
+    if (!checkRev.get(r.customer_name)) {
+      insertRev.run(r.customer_name, r.rating, r.comment, r.is_approved);
+    }
+  });
 }
 
 initDatabase();

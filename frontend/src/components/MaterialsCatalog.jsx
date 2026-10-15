@@ -263,9 +263,10 @@ export default function MaterialsCatalog({
                   <button
                     onClick={() => onSelectQuoteMaterial(material.name)}
                     className="btn btn-outline btn-sm"
-                    style={{ fontSize: '0.84rem' }}
+                    style={{ fontSize: '0.84rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}
+                    title="Get instant price quote and download official PDF estimate"
                   >
-                    <FileText size={14} /> Quote
+                    <FileText size={14} color="#38bdf8" /> Quote / PDF
                   </button>
                   <button
                     onClick={() => onSelectDeliveryMaterial(material.name)}
@@ -350,7 +351,7 @@ export default function MaterialsCatalog({
                 className="btn btn-outline"
                 style={{ flex: 1 }}
               >
-                Request Quotation
+                Request Quotation & PDF
               </button>
               <button
                 onClick={() => {

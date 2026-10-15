@@ -17,6 +17,7 @@ import {
   Download
 } from 'lucide-react';
 import { api } from '../api';
+import { downloadQuotationPDF } from '../utils/quotationPdf';
 
 const formatDateDDMMYYYY = (dateInput) => {
   if (!dateInput) return '';
@@ -459,6 +460,11 @@ export default function CustomerDashboard({
                           #{del.request_number}
                         </span>
                         {getStatusBadge(del.status)}
+                        {del.city && (
+                          <span className={`badge ${del.city === 'Villupuram' ? 'badge-blue' : del.city === 'Tindivanam' ? 'badge-orange' : 'badge-green'}`} style={{ fontSize: '0.74rem' }}>
+                            📍 {del.city} {del.transport_charge > 0 ? `(+₹${Number(del.transport_charge).toLocaleString('en-IN')} transport)` : '(Free Delivery)'}
+                          </span>
+                        )}
                       </div>
                       <h3 style={{ fontSize: '1.25rem', color: '#fff', fontWeight: 700, marginBottom: '0.35rem' }}>
                         {del.quantity} {del.unit} of {del.material_name}
@@ -545,10 +551,31 @@ export default function CustomerDashboard({
                       )}
                     </div>
 
-                    <div style={{ textAlign: 'right' }}>
+                    <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.65rem' }}>
                       <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
                         Submitted: {new Date(q.created_at).toLocaleDateString()}
                       </div>
+                      <button
+                        onClick={() => {
+                          downloadQuotationPDF({
+                            customer_name: q.customer_name || user?.name || 'Valued Customer',
+                            customer_mobile: q.customer_mobile || user?.mobile || '',
+                            customer_email: q.customer_email || user?.email || '',
+                            material_name: q.material_name,
+                            quantity: q.quantity,
+                            unit: q.unit,
+                            delivery_location: q.delivery_location,
+                            notes: q.admin_notes || q.message || '',
+                            request_number: q.request_number,
+                            created_at: q.created_at
+                          });
+                        }}
+                        className="btn btn-outline btn-sm"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}
+                        title="Download official quotation PDF"
+                      >
+                        <Download size={13} color="#38bdf8" /> Download PDF
+                      </button>
                     </div>
                   </div>
                 ))}

@@ -236,16 +236,8 @@ export default function App() {
     setActiveView('home');
   };
 
-  // Triggers for modals with pre-selected material — requires login before ordering / quotation
+  // Triggers for modals with pre-selected material — QuoteModal is accessible directly for instant PDF downloads
   const handleOpenQuoteWithMaterial = (materialName = '') => {
-    if (!user && !admin) {
-      setSelectedMaterialForModal(materialName || '');
-      setPendingAction({ type: 'quote', material: materialName || '' });
-      setAuthBannerMessage('Please sign in or register to request an official quotation');
-      setAuthInitialMode('customer');
-      setAuthModalOpen(true);
-      return;
-    }
     setSelectedMaterialForModal(materialName || '');
     setQuoteModalOpen(true);
   };
@@ -477,11 +469,12 @@ export default function App() {
         onClose={() => setQuoteModalOpen(false)}
         initialMaterial={selectedMaterialForModal}
         materials={materials}
+        settings={settings}
         user={user || admin}
         onRequireLogin={() => {
           setQuoteModalOpen(false);
           setPendingAction({ type: 'quote', material: selectedMaterialForModal });
-          setAuthBannerMessage('Please sign in with Google to request an official quotation');
+          setAuthBannerMessage('Please sign in with Google to save quotation to your account');
           setAuthInitialMode('customer');
           setAuthModalOpen(true);
         }}

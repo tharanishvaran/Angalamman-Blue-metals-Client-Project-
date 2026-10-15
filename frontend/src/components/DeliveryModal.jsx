@@ -126,6 +126,7 @@ export default function DeliveryModal({
     material: initialMaterial || 'M-Sand (Manufactured Sand)',
     quantity: '1',
     unit: 'Unit', // Default to Unit, switchable between Unit and Ton
+    city: 'Pondicherry', // Default city Pondicherry (Free local delivery)
     address: '',
     location_link: '',
     preferred_date: todayDateString,
@@ -168,12 +169,20 @@ export default function DeliveryModal({
   // Sync logged in user profile
   useEffect(() => {
     if (user) {
+      let detectedCity = 'Pondicherry';
+      const userAddr = (user.address || '').toLowerCase();
+      if (userAddr.includes('villupuram')) {
+        detectedCity = 'Villupuram';
+      } else if (userAddr.includes('tindivanam')) {
+        detectedCity = 'Tindivanam';
+      }
       setForm((prev) => ({
         ...prev,
         name: user.name || prev.name,
         mobile: user.mobile || prev.mobile,
         email: user.email || prev.email,
-        address: user.address || prev.address
+        address: user.address || prev.address,
+        city: (prev.city && prev.city !== 'Pondicherry') ? prev.city : detectedCity
       }));
     }
   }, [user]);
@@ -233,6 +242,20 @@ export default function DeliveryModal({
   const activeRate = form.unit === 'Ton' ? unitPricePerTon : unitPricePerUnit;
   const numQuantity = Math.max(0, parseFloat(form.quantity) || 0);
   const estimatedSubtotal = Math.round(activeRate * numQuantity);
+
+  // Dynamic city transport charges configured by admin (defaults: Pondicherry ₹0, Villupuram ₹1000, Tindivanam ₹1000)
+  const cityTransportRates = useMemo(() => ({
+    'Pondicherry': Number(settings?.transport_charge_pondicherry ?? 0) || 0,
+    'Villupuram': Number(settings?.transport_charge_villupuram ?? 1000) || 1000,
+    'Tindivanam': Number(settings?.transport_charge_tindivanam ?? 1000) || 1000
+  }), [settings]);
+
+  const selectedCity = form.city || 'Pondicherry';
+  const transportCharge = bookingMode === 'material'
+    ? (cityTransportRates[selectedCity] ?? (selectedCity.toLowerCase().includes('pondicherry') ? 0 : 1000))
+    : 0;
+
+  const estimatedTotal = estimatedSubtotal + transportCharge;
 
   // Field validation logic
   const validateField = (fieldName, value) => {
@@ -347,20 +370,23 @@ export default function DeliveryModal({
   };
 
   const handleChange = (field, val) => {
-    setForm(prev => ({ ...prev, [field]: val }));
-
-    // Automatically clear cross-field errors when either address or maps link is entered
     if (field === 'address') {
-      if (val && val.trim().length >= 4) {
-        setErrors(prev => ({ ...prev, address: '', location_link: '' }));
+      const lower = val.toLowerCase();
+      let detectedCity = null;
+      if (lower.includes('villupuram')) {
+        detectedCity = 'Villupuram';
+      } else if (lower.includes('tindivanam')) {
+        detectedCity = 'Tindivanam';
+      } else if (lower.includes('pondicherry') || lower.includes('pondy') || lower.includes('puducherry')) {
+        detectedCity = 'Pondicherry';
       }
-    } else if (field === 'location_link') {
-      if (val && val.trim().length > 0) {
-        setErrors(prev => ({ ...prev, address: '', location_link: '' }));
-      }
-    } else if (touched[field]) {
-      const err = validateField(field, val);
-      setErrors(prev => ({ ...prev, [field]: err }));
+      setForm(prev => ({
+        ...prev,
+        address: val,
+        ...(detectedCity ? { city: detectedCity } : {})
+      }));
+    } else {
+      setForm(prev => ({ ...prev, [field]: val }));
     }
   };
 
@@ -457,10 +483,13 @@ export default function DeliveryModal({
         };
       } else {
         const combinedNotes = [
+          `City: ${selectedCity}`,
+          transportCharge > 0 ? `Transport Charge: ₹${transportCharge.toLocaleString('en-IN')}` : `Transport Charge: ₹0 (Free in Pondicherry)`,
           form.preferred_time_slot ? `Slot: ${form.preferred_time_slot}` : null,
           form.notes ? `Vehicle: ${form.notes}` : null,
           `Original Rate: ₹${activeRate.toLocaleString('en-IN')}/${form.unit}`,
-          `Est. Total: ₹${estimatedSubtotal.toLocaleString('en-IN')}`,
+          `Material Subtotal: ₹${estimatedSubtotal.toLocaleString('en-IN')}`,
+          `Total: ₹${estimatedTotal.toLocaleString('en-IN')}`,
           trimmedLink ? `Maps Link: ${trimmedLink}` : null
         ].filter(Boolean).join(' | ');
 
@@ -471,6 +500,8 @@ export default function DeliveryModal({
           material_name: form.material,
           quantity: numQuantity,
           unit: form.unit, // Selected Unit or Ton
+          city: selectedCity,
+          transport_charge: transportCharge,
           delivery_address: fullAddress,
           location_link: trimmedLink || undefined,
           preferred_date: formattedDateString,
@@ -486,12 +517,15 @@ export default function DeliveryModal({
         material_name: isVeh ? activeVehicleObj.name : (res.delivery?.material_name || form.material),
         quantity: isVeh ? 1 : (res.delivery?.quantity || numQuantity),
         unit: isVeh ? 'Trip' : (res.delivery?.unit || form.unit),
+        city: res.delivery?.city || selectedCity,
+        transport_charge: res.delivery?.transport_charge ?? transportCharge,
         customer_name: res.delivery?.customer_name || form.name.trim(),
         customer_mobile: res.delivery?.customer_mobile || cleanMobile,
         delivery_address: res.delivery?.delivery_address || fullAddress,
         preferred_date: res.delivery?.preferred_date || formattedDateString,
         original_price_rate: isVeh ? activeVehicleObj.rate : activeRate,
-        estimated_total: isVeh ? activeVehicleObj.rate : estimatedSubtotal,
+        material_subtotal: estimatedSubtotal,
+        estimated_total: isVeh ? activeVehicleObj.rate : estimatedTotal,
         preferred_date_raw: form.preferred_date,
         preferred_time_slot: form.preferred_time_slot,
         location_link: form.location_link
@@ -552,11 +586,7 @@ export default function DeliveryModal({
           width: '95%',
           maxHeight: '90vh',
           overflowY: 'auto',
-          padding: '1.75rem 1.4rem',
-          WebkitOverflowScrolling: 'touch',
-          overscrollBehavior: 'contain',
-          contain: 'paint',
-          transform: 'translateZ(0)'
+          padding: '1.75rem 1.4rem'
         }}
       >
         
@@ -789,11 +819,33 @@ export default function DeliveryModal({
                   ₹{(bookedDelivery.original_price_rate || (bookedDelivery.is_vehicle ? activeVehicleObj.rate : activeRate))?.toLocaleString('en-IN')} / {bookedDelivery.unit || (bookedDelivery.is_vehicle ? 'Trip' : form.unit)}
                 </span>
               </div>
+              {!bookedDelivery.is_vehicle && (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
+                    <span style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Delivery City:</span>
+                    <span style={{ color: '#38bdf8', fontWeight: 700 }}>
+                      📍 {bookedDelivery.city || 'Pondicherry'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
+                    <span style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Material Subtotal:</span>
+                    <span style={{ color: '#e2e8f0', fontWeight: 600 }}>₹{(bookedDelivery.material_subtotal || estimatedSubtotal)?.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
+                    <span style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Vehicle Transport Charge:</span>
+                    <span style={{ color: (bookedDelivery.transport_charge > 0) ? '#fb923c' : '#10b981', fontWeight: 700 }}>
+                      {(bookedDelivery.transport_charge > 0)
+                        ? `+ ₹${bookedDelivery.transport_charge?.toLocaleString('en-IN')} (${bookedDelivery.city})`
+                        : '₹0 (Free in Pondicherry)'}
+                    </span>
+                  </div>
+                </>
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
                 <span style={{ color: '#94a3b8', fontSize: '0.84rem' }}>
-                  {bookedDelivery.is_vehicle ? 'Est. Trip Charge:' : 'Est. Material Subtotal:'}
+                  {bookedDelivery.is_vehicle ? 'Est. Trip Charge:' : 'Total Booked Amount:'}
                 </span>
-                <strong style={{ color: '#34d399', fontSize: '1rem' }}>₹{bookedDelivery.estimated_total?.toLocaleString('en-IN')}</strong>
+                <strong style={{ color: '#34d399', fontSize: '1.05rem' }}>₹{bookedDelivery.estimated_total?.toLocaleString('en-IN')}</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
                 <span style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Scheduled Dispatch:</span>
@@ -1173,21 +1225,48 @@ export default function DeliveryModal({
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.45rem', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                  {/* Material Subtotal */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.35rem 0', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                    <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
+                      Material Subtotal ({numQuantity} {form.unit}{numQuantity > 1 ? 's' : ''} × ₹{activeRate.toLocaleString('en-IN')})
+                    </span>
+                    <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#e2e8f0' }}>
+                      ₹{estimatedSubtotal.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+
+                  {/* Transport / Vehicle Charge based on City */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.35rem 0', borderTop: '1px dashed rgba(255, 255, 255, 0.08)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <Truck size={13} color={transportCharge > 0 ? '#fb923c' : '#10b981'} />
+                      <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
+                        Vehicle Transport Charge ({selectedCity})
+                      </span>
+                    </div>
+                    <span style={{ 
+                      fontSize: '0.88rem', 
+                      fontWeight: 700, 
+                      color: transportCharge > 0 ? '#fb923c' : '#10b981' 
+                    }}>
+                      {transportCharge > 0 
+                        ? `+ ₹${transportCharge.toLocaleString('en-IN')}` 
+                        : '₹0 (Free in Pondicherry)'}
+                    </span>
+                  </div>
+
+                  {/* Grand Total */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.45rem', marginTop: '0.2rem', borderTop: '1px solid rgba(255, 255, 255, 0.12)' }}>
                     <div>
-                      <div style={{ fontSize: '0.76rem', color: '#94a3b8' }}>
-                        {numQuantity} {form.unit}(s) × ₹{activeRate.toLocaleString('en-IN')}
+                      <div style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Est. Total Amount
                       </div>
                       <div style={{ fontSize: '0.72rem', color: '#10b981', fontWeight: 600 }}>
-                        {form.unit === 'Ton' ? '✓ Computerized Weighbridge Slip Included' : '✓ Standard Puducherry Yard Measurement Guaranteed'}
+                        {form.unit === 'Ton' ? '✓ Computerized Weighbridge Slip Included' : '✓ Standard Yard Measurement Guaranteed'}
                       </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                        Est. Material Subtotal
-                      </div>
-                      <div style={{ fontSize: '1.28rem', fontWeight: 900, color: '#38bdf8' }}>
-                        ₹{estimatedSubtotal.toLocaleString('en-IN')}
+                      <div style={{ fontSize: '1.35rem', fontWeight: 900, color: '#38bdf8' }}>
+                        ₹{estimatedTotal.toLocaleString('en-IN')}
                       </div>
                     </div>
                   </div>
@@ -1300,6 +1379,51 @@ export default function DeliveryModal({
               </div>
             </div>
 
+            {/* CITY SELECTION FIELD (PONDICHERRY AS DEFAULT, VILLUPURAM, TINDIVANAM) */}
+            <div className="form-group" style={{ marginBottom: '1.15rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem', flexWrap: 'wrap', gap: '0.3rem' }}>
+                <label className="form-label" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <MapPin size={15} color="#38bdf8" />
+                  <span>Delivery City <span style={{ color: '#ef4444' }}>*</span></span>
+                </label>
+                <span style={{ 
+                  fontSize: '0.74rem', 
+                  color: selectedCity === 'Pondicherry' ? '#10b981' : '#fb923c', 
+                  fontWeight: 700,
+                  background: selectedCity === 'Pondicherry' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(251, 146, 60, 0.12)',
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  border: selectedCity === 'Pondicherry' ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid rgba(251, 146, 60, 0.25)'
+                }}>
+                  {selectedCity === 'Pondicherry' 
+                    ? '✓ Free Vehicle Delivery (₹0)' 
+                    : `+ ₹${transportCharge.toLocaleString('en-IN')} Transport Charge (${selectedCity})`}
+                </span>
+              </div>
+              <select
+                className="form-control"
+                value={form.city}
+                onChange={(e) => handleChange('city', e.target.value)}
+                style={{
+                  fontWeight: 700,
+                  color: '#fff',
+                  background: 'rgba(15, 23, 42, 0.95)',
+                  borderColor: selectedCity !== 'Pondicherry' ? 'rgba(251, 146, 60, 0.5)' : undefined,
+                  boxShadow: selectedCity !== 'Pondicherry' ? '0 0 10px rgba(251, 146, 60, 0.15)' : undefined,
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="Pondicherry">Pondicherry (Default - Free Local Delivery)</option>
+                <option value="Villupuram">Villupuram (+₹{(cityTransportRates['Villupuram'] || 1000).toLocaleString('en-IN')} Transport Charge)</option>
+                <option value="Tindivanam">Tindivanam (+₹{(cityTransportRates['Tindivanam'] || 1000).toLocaleString('en-IN')} Transport Charge)</option>
+              </select>
+              <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '4px', lineHeight: 1.4 }}>
+                {selectedCity === 'Pondicherry'
+                  ? 'Zero additional vehicle travelling costs in Pondicherry.'
+                  : `Outstation transport charge of ₹${transportCharge.toLocaleString('en-IN')} will be added for dispatch to ${selectedCity}.`}
+              </div>
+            </div>
+
             {/* Row 5 & 6 Note: Single required field rule */}
             <div style={{
               background: 'rgba(56, 189, 248, 0.06)',
@@ -1323,7 +1447,7 @@ export default function DeliveryModal({
             <div className="form-group" style={{ marginBottom: '1rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', flexWrap: 'wrap', gap: '0.3rem' }}>
                 <label className="form-label" style={{ marginBottom: 0 }}>
-                  Exact Site Delivery Address in Puducherry {(!form.location_link || !form.location_link.trim()) && <span style={{ color: '#ef4444' }}>*</span>}
+                  Exact Site Delivery Address in {selectedCity} {(!form.location_link || !form.location_link.trim()) && <span style={{ color: '#ef4444' }}>*</span>}
                 </label>
                 <span style={{ fontSize: '0.72rem', color: (form.location_link && form.location_link.trim()) ? '#34d399' : '#94a3b8', fontWeight: 600 }}>
                   {(form.location_link && form.location_link.trim()) ? '✓ Optional (Google Maps Link provided)' : '(Required unless Maps Pin given)'}
@@ -1473,7 +1597,7 @@ export default function DeliveryModal({
                   ? 'Processing Dispatch...' 
                   : bookingMode === 'vehicle'
                     ? `Request ${activeVehicleObj.name} • ₹${activeVehicleObj.rate.toLocaleString('en-IN')}`
-                    : `Confirm Delivery Booking • ₹${estimatedSubtotal.toLocaleString('en-IN')}`
+                    : `Confirm Delivery Booking • ₹${estimatedTotal.toLocaleString('en-IN')}`
                 }
               </span>
             </button>

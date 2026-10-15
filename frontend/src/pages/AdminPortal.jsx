@@ -276,16 +276,38 @@ export default function AdminPortal({
 
   // Compute price & amount for a delivery item (supports both materials and transport vehicles)
   const getDeliveryPricing = (del) => {
+    const rawCity = del.city || (
+      (del.delivery_address || '').toLowerCase().includes('villupuram') ? 'Villupuram' :
+      (del.delivery_address || '').toLowerCase().includes('tindivanam') ? 'Tindivanam' : 'Pondicherry'
+    );
+
+    // Calculate transport charge
+    let transportCharge = 0;
+    if (del.transport_charge !== undefined && del.transport_charge !== null) {
+      transportCharge = parseFloat(del.transport_charge) || 0;
+    } else {
+      const cityKey = `transport_charge_${rawCity.toLowerCase()}`;
+      if (siteSettings && siteSettings[cityKey] !== undefined) {
+        transportCharge = parseFloat(siteSettings[cityKey]) || 0;
+      } else if (rawCity === 'Villupuram' || rawCity === 'Tindivanam') {
+        transportCharge = 1000;
+      }
+    }
+
     const matchedMat = findMaterialMatch(del.material_name, materials);
     if (matchedMat) {
       const unitPrice = matchedMat.price || 0;
       const qty = parseFloat(del.quantity) || 1;
+      const matSubtotal = qty * unitPrice;
       return {
         isVehicle: false,
         unitPrice,
-        estAmount: qty * unitPrice,
+        matSubtotal,
+        transportCharge,
+        estAmount: matSubtotal + transportCharge,
         unitLabel: matchedMat.unit || del.unit || 'Unit',
-        matName: matchedMat.name
+        matName: matchedMat.name,
+        city: rawCity
       };
     }
 
@@ -308,12 +330,16 @@ export default function AdminPortal({
 
     const unitPrice = vRate || (parseFloat(del.price) || 0);
     const qty = parseFloat(del.quantity) || 1;
+    const subtotal = qty * unitPrice;
     return {
       isVehicle,
       unitPrice,
-      estAmount: qty * unitPrice,
+      matSubtotal: subtotal,
+      transportCharge: isVehicle ? 0 : transportCharge,
+      estAmount: isVehicle ? subtotal : (subtotal + transportCharge),
       unitLabel: del.unit || (isVehicle ? 'Trip' : 'Unit'),
-      matName: del.material_name || 'Vehicle Transport'
+      matName: del.material_name || 'Vehicle Transport',
+      city: rawCity
     };
   };
 
@@ -321,6 +347,22 @@ export default function AdminPortal({
   const handleBillDelivery = (del) => {
     const pricing = getDeliveryPricing(del);
     const qty = parseFloat(del.quantity) || 1;
+
+    const invoiceItems = [{
+      material_name: pricing.matName,
+      quantity: qty,
+      unit: pricing.unitLabel,
+      unit_price: pricing.unitPrice
+    }];
+
+    if (pricing.transportCharge > 0) {
+      invoiceItems.push({
+        material_name: `Vehicle Transport Charge (${pricing.city || 'Outstation'})`,
+        quantity: 1,
+        unit: 'Trip',
+        unit_price: pricing.transportCharge
+      });
+    }
 
     setBillingForm({
       user_id: del.user_id || '',
@@ -331,13 +373,10 @@ export default function AdminPortal({
       discount: 0,
       paid_amount: 0,
       payment_status: 'Unpaid',
-      notes: pricing.isVehicle ? `Vehicle Transport Booking #${del.request_number}` : `Site Delivery Order #${del.request_number}`,
-      items: [{
-        material_name: pricing.matName,
-        quantity: qty,
-        unit: pricing.unitLabel,
-        unit_price: pricing.unitPrice
-      }]
+      notes: pricing.isVehicle 
+        ? `Vehicle Transport Booking #${del.request_number}` 
+        : `Site Delivery Order #${del.request_number} [${pricing.city || 'Pondicherry'}]`,
+      items: invoiceItems
     });
     setActiveSection('invoices');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1370,11 +1409,16 @@ export default function AdminPortal({
                               <div style={{ color: '#fff', fontWeight: 600 }}>
                                 {pricing.isVehicle ? '🚛' : '📦'} {del.quantity} {pricing.unitLabel} of {del.material_name}
                               </div>
-                              {del.preferred_date && (
-                                <div style={{ color: '#60a5fa', fontSize: '0.75rem', marginTop: '3px', display: 'inline-flex', alignItems: 'center', gap: '3px', background: 'rgba(96, 165, 250, 0.1)', padding: '1px 6px', borderRadius: '4px' }}>
-                                  <Calendar size={11} /> {del.preferred_date}
-                                </div>
-                              )}
+                              <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                                <span className={`badge ${pricing.city === 'Villupuram' ? 'badge-blue' : pricing.city === 'Tindivanam' ? 'badge-orange' : 'badge-green'}`} style={{ fontSize: '0.72rem', padding: '1px 6px' }}>
+                                  📍 {pricing.city}
+                                </span>
+                                {del.preferred_date && (
+                                  <span style={{ color: '#60a5fa', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '3px', background: 'rgba(96, 165, 250, 0.1)', padding: '1px 6px', borderRadius: '4px' }}>
+                                    <Calendar size={11} /> {del.preferred_date}
+                                  </span>
+                                )}
+                              </div>
                               {del.additional_notes && (
                                 <div 
                                   style={{ color: '#94a3b8', fontSize: '0.74rem', marginTop: '3px', fontStyle: 'italic', maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} 
@@ -1393,6 +1437,11 @@ export default function AdminPortal({
                               {pricing.unitPrice > 0 && (
                                 <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '2px' }}>
                                   @ ₹{pricing.unitPrice.toLocaleString('en-IN')}/{pricing.unitLabel}
+                                </div>
+                              )}
+                              {pricing.transportCharge > 0 && (
+                                <div style={{ fontSize: '0.72rem', color: '#38bdf8', marginTop: '2px' }}>
+                                  + ₹{pricing.transportCharge.toLocaleString('en-IN')} Transport
                                 </div>
                               )}
                             </td>
@@ -1533,6 +1582,16 @@ export default function AdminPortal({
                             <div style={{ fontWeight: 800, color: '#fb923c', fontSize: '1.05rem' }}>
                               {pricing.estAmount > 0 ? `₹${pricing.estAmount.toLocaleString('en-IN')}` : 'Rate TBD'}
                             </div>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                            <span className={`badge ${pricing.city === 'Villupuram' ? 'badge-blue' : pricing.city === 'Tindivanam' ? 'badge-orange' : 'badge-green'}`} style={{ fontSize: '0.7rem', padding: '1px 6px' }}>
+                              📍 {pricing.city}
+                            </span>
+                            {pricing.transportCharge > 0 && (
+                              <span style={{ fontSize: '0.72rem', color: '#38bdf8', fontWeight: 700 }}>
+                                +₹{pricing.transportCharge.toLocaleString('en-IN')} Transport
+                              </span>
+                            )}
                           </div>
                           {pricing.unitPrice > 0 && (
                             <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '3px', display: 'flex', justifyContent: 'space-between' }}>
@@ -3566,6 +3625,84 @@ export default function AdminPortal({
                       />
                       <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '4px' }}>
                         5 - 10 Units / 16 - 25 Tons (Bulk Supply)
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* CITY TRANSPORT CHARGES (VILLUPURAM, TINDIVANAM, PONDICHERRY) */}
+                <div style={{
+                  padding: '1.25rem',
+                  background: 'rgba(56, 189, 248, 0.05)',
+                  border: '1px solid rgba(56, 189, 248, 0.25)',
+                  borderRadius: '14px',
+                  marginTop: '1.25rem'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem' }}>
+                    <MapPin size={20} color="#38bdf8" />
+                    <h4 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#fff', margin: 0 }}>
+                      City Transport & Vehicle Delivery Charges (₹)
+                    </h4>
+                  </div>
+                  <p style={{ fontSize: '0.82rem', color: '#94a3b8', marginBottom: '1.1rem', lineHeight: 1.45 }}>
+                    Manage transport charges applied when customers book material deliveries by city. Pondicherry has zero vehicle travelling costs (₹0). Outstation deliveries such as Villupuram and Tindivanam incur additional vehicle charges that you can configure below.
+                  </p>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+                    {/* Pondicherry */}
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 700, color: '#10b981' }}>
+                        📍 Pondicherry (Local Delivery)
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value="₹0 (Free / No Vehicle Charge)"
+                        disabled
+                        style={{ fontWeight: 700, color: '#10b981', background: 'rgba(16, 185, 129, 0.1)', cursor: 'not-allowed' }}
+                      />
+                      <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '4px' }}>
+                        Default city • Zero additional travelling costs
+                      </div>
+                    </div>
+
+                    {/* Villupuram */}
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 700, color: '#38bdf8' }}>
+                        📍 Villupuram Transport Charge (₹)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="50"
+                        className="form-control"
+                        placeholder="1000"
+                        value={settingsForm.transport_charge_villupuram ?? 1000}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, transport_charge_villupuram: e.target.value })}
+                        style={{ fontWeight: 700, color: '#38bdf8' }}
+                      />
+                      <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '4px' }}>
+                        Vehicle charge applied for Villupuram deliveries
+                      </div>
+                    </div>
+
+                    {/* Tindivanam */}
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 700, color: '#fb923c' }}>
+                        📍 Tindivanam Transport Charge (₹)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="50"
+                        className="form-control"
+                        placeholder="1000"
+                        value={settingsForm.transport_charge_tindivanam ?? 1000}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, transport_charge_tindivanam: e.target.value })}
+                        style={{ fontWeight: 700, color: '#fb923c' }}
+                      />
+                      <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '4px' }}>
+                        Vehicle charge applied for Tindivanam deliveries
                       </div>
                     </div>
                   </div>
