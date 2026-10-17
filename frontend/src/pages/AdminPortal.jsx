@@ -238,8 +238,11 @@ export default function AdminPortal({
       setUploadingImageKey(`mat-${materialId}`);
       const res = await api.uploadImage(file);
       await api.updateMaterial(materialId, { image_url: res.imageUrl });
+      setMaterials(prev => prev.map(m => m.id === materialId ? { ...m, image_url: res.imageUrl } : m));
       await loadAllAdminData();
       if (onDataUpdated) onDataUpdated();
+      setSettingsSavedMsg('Material picture updated and saved successfully!');
+      setTimeout(() => setSettingsSavedMsg(''), 4000);
     } catch (err) {
       alert(err.message || 'Failed to update material picture');
     } finally {
@@ -949,7 +952,9 @@ export default function AdminPortal({
                                 style={{ display: 'none' }} 
                                 onChange={(e) => {
                                   if (e.target.files && e.target.files[0]) {
-                                    handleDirectMaterialImageUpload(m.id, e.target.files[0]);
+                                    const file = e.target.files[0];
+                                    e.target.value = '';
+                                    handleDirectMaterialImageUpload(m.id, file);
                                   }
                                 }} 
                               />
@@ -1010,7 +1015,9 @@ export default function AdminPortal({
                             style={{ display: 'none' }} 
                             onChange={(e) => {
                               if (e.target.files && e.target.files[0]) {
-                                handleDirectMaterialImageUpload(m.id, e.target.files[0]);
+                                const file = e.target.files[0];
+                                e.target.value = '';
+                                handleDirectMaterialImageUpload(m.id, file);
                               }
                             }} 
                           />
@@ -1120,7 +1127,9 @@ export default function AdminPortal({
                         style={{ display: 'none' }}
                         onChange={(e) => {
                           if (e.target.files && e.target.files[0]) {
-                            handleUploadSettingImage('hero_image', e.target.files[0]);
+                            const file = e.target.files[0];
+                            e.target.value = '';
+                            handleUploadSettingImage('hero_image', file);
                           }
                         }}
                       />
@@ -1186,7 +1195,9 @@ export default function AdminPortal({
                         style={{ display: 'none' }}
                         onChange={(e) => {
                           if (e.target.files && e.target.files[0]) {
-                            handleUploadSettingImage('about_image', e.target.files[0]);
+                            const file = e.target.files[0];
+                            e.target.value = '';
+                            handleUploadSettingImage('about_image', file);
                           }
                         }}
                       />
@@ -1244,11 +1255,25 @@ export default function AdminPortal({
                         style={{ display: 'none' }}
                         onChange={(e) => {
                           if (e.target.files && e.target.files[0]) {
-                            handleUploadSettingImage('vehicle_tractor_image', e.target.files[0]);
+                            const file = e.target.files[0];
+                            e.target.value = '';
+                            handleUploadSettingImage('vehicle_tractor_image', file);
                           }
                         }}
                       />
                     </label>
+
+                    <div style={{ marginTop: '0.65rem' }}>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Image URL / Path e.g. /images/tractor_trolley.jpg"
+                        value={settingsForm.vehicle_tractor_image || ''}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, vehicle_tractor_image: e.target.value })}
+                        onBlur={() => api.updateSettings({ vehicle_tractor_image: settingsForm.vehicle_tractor_image })}
+                        style={{ fontSize: '0.78rem' }}
+                      />
+                    </div>
                   </div>
 
                   {/* Vehicle 2: Mini Tipper */}
@@ -1276,11 +1301,25 @@ export default function AdminPortal({
                         style={{ display: 'none' }}
                         onChange={(e) => {
                           if (e.target.files && e.target.files[0]) {
-                            handleUploadSettingImage('vehicle_tipper_image', e.target.files[0]);
+                            const file = e.target.files[0];
+                            e.target.value = '';
+                            handleUploadSettingImage('vehicle_tipper_image', file);
                           }
                         }}
                       />
                     </label>
+
+                    <div style={{ marginTop: '0.65rem' }}>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Image URL / Path e.g. /images/fleet.jpg"
+                        value={settingsForm.vehicle_tipper_image || ''}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, vehicle_tipper_image: e.target.value })}
+                        onBlur={() => api.updateSettings({ vehicle_tipper_image: settingsForm.vehicle_tipper_image })}
+                        style={{ fontSize: '0.78rem' }}
+                      />
+                    </div>
                   </div>
 
                   {/* Vehicle 3: Heavy Tipper */}
@@ -1308,30 +1347,110 @@ export default function AdminPortal({
                         style={{ display: 'none' }}
                         onChange={(e) => {
                           if (e.target.files && e.target.files[0]) {
-                            handleUploadSettingImage('vehicle_lorry_image', e.target.files[0]);
+                            const file = e.target.files[0];
+                            e.target.value = '';
+                            handleUploadSettingImage('vehicle_lorry_image', file);
                           }
                         }}
                       />
                     </label>
+
+                    <div style={{ marginTop: '0.65rem' }}>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Image URL / Path e.g. /images/heavy_tipper.jpg"
+                        value={settingsForm.vehicle_lorry_image || ''}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, vehicle_lorry_image: e.target.value })}
+                        onBlur={() => api.updateSettings({ vehicle_lorry_image: settingsForm.vehicle_lorry_image })}
+                        style={{ fontSize: '0.78rem' }}
+                      />
+                    </div>
                   </div>
 
                 </div>
               </div>
 
-              {/* 3. Materials Photos Management Shortcut */}
-              <div className="glass-card" style={{ padding: '1.5rem', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
-                <div>
-                  <h4 style={{ fontSize: '1.1rem', color: '#fff', fontWeight: 700 }}>Materials Catalog Pictures</h4>
-                  <p style={{ fontSize: '0.82rem', color: '#94a3b8' }}>
-                    Each material has individual photos (M-Sand, P-Sand, Aggregates, Bricks, etc.) that can be uploaded in the catalog.
-                  </p>
+              {/* 3. Materials Photos Management Section */}
+              <div className="glass-card" style={{ padding: '1.75rem', borderRadius: '18px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' }}>
+                  <div>
+                    <h4 style={{ fontSize: '1.15rem', color: '#fff', fontWeight: 700 }}>Materials Catalog Pictures</h4>
+                    <p style={{ fontSize: '0.82rem', color: '#94a3b8', margin: '3px 0 0' }}>
+                      Manage and upload photos for each material ({materials?.length || 0} materials in catalog). High-resolution camera photos are automatically optimized.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setActiveSection('materials')}
+                    className="btn btn-outline btn-sm"
+                  >
+                    <Layers size={15} /> Open Full Catalog
+                  </button>
                 </div>
-                <button
-                  onClick={() => setActiveSection('materials')}
-                  className="btn btn-primary btn-sm"
-                >
-                  <Layers size={16} /> Manage Materials Pictures
-                </button>
+
+                {/* Materials Photo Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '1rem' }}>
+                  {materials.map((m) => (
+                    <div 
+                      key={`pic-mat-${m.id}`} 
+                      style={{ 
+                        background: 'rgba(255, 255, 255, 0.03)', 
+                        border: '1px solid rgba(255, 255, 255, 0.07)', 
+                        borderRadius: '12px', 
+                        padding: '0.85rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between'
+                      }}
+                    >
+                      <div>
+                        <div style={{ position: 'relative', width: '100%', height: '110px', borderRadius: '8px', overflow: 'hidden', background: '#091122', marginBottom: '0.65rem', border: '1px solid rgba(255,255,255,0.1)' }}>
+                          <img 
+                            src={m.image_url || '/images/hero.jpg'} 
+                            alt={m.name} 
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                            onError={(e) => { e.target.src = '/images/hero.jpg'; }} 
+                          />
+                        </div>
+                        <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {m.name}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '2px' }}>
+                          {m.category} • ₹{m.price?.toLocaleString('en-IN')} / {m.unit}
+                        </div>
+                      </div>
+
+                      <div style={{ marginTop: '0.75rem' }}>
+                        <label 
+                          className="btn btn-primary btn-sm" 
+                          style={{ 
+                            cursor: 'pointer', 
+                            width: '100%', 
+                            justifyContent: 'center', 
+                            fontSize: '0.74rem', 
+                            padding: '0.35rem 0.5rem',
+                            opacity: uploadingImageKey === `mat-${m.id}` ? 0.7 : 1
+                          }}
+                        >
+                          <Upload size={12} />
+                          <span>{uploadingImageKey === `mat-${m.id}` ? 'Uploading...' : 'Change Picture'}</span>
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            style={{ display: 'none' }} 
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                const file = e.target.files[0];
+                                e.target.value = '';
+                                handleDirectMaterialImageUpload(m.id, file);
+                              }
+                            }} 
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
             </div>
@@ -3847,7 +3966,9 @@ export default function AdminPortal({
                         style={{ display: 'none' }} 
                         onChange={(e) => {
                           if (e.target.files && e.target.files[0]) {
-                            handleUploadMaterialImage(e.target.files[0]);
+                            const file = e.target.files[0];
+                            e.target.value = '';
+                            handleUploadMaterialImage(file);
                           }
                         }}
                       />

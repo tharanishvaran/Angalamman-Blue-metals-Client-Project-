@@ -12,8 +12,8 @@ app.use(cors({
   origin: process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',') : '*',
   credentials: true
 }));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Static Assets
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -73,7 +73,10 @@ if (fs.existsSync(frontendDist)) {
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Unhandled Server Error:', err);
-  res.status(500).json({ error: err.message || 'Internal server error' });
+  if (err && (err.code === 'LIMIT_FILE_SIZE' || (err.message && err.message.toLowerCase().includes('file too large')))) {
+    return res.status(400).json({ error: 'Image file is too large (maximum size is 50MB)' });
+  }
+  res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
 });
 
 // Start Server

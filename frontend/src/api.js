@@ -1,3 +1,5 @@
+import { optimizeImageForUpload } from './utils/imageOptimizer';
+
 const PRIMARY_API = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000/api' : '/api');
 const CLOUD_FALLBACK_API = 'https://angalamman-blue-metals.onrender.com/api';
 
@@ -28,12 +30,13 @@ async function request(endpoint, options = {}) {
     ...getHeaders(!isFormData),
     ...(options.headers || {})
   };
+  const timeoutMs = options.timeoutMs || 15000;
 
   try {
     const res = await fetchWithTimeout(`${PRIMARY_API}${endpoint}`, {
       ...options,
       headers
-    }, 15000);
+    }, timeoutMs);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       throw new Error(data.error || 'Server error occurred');
@@ -47,7 +50,7 @@ async function request(endpoint, options = {}) {
         const fallbackRes = await fetchWithTimeout(`${CLOUD_FALLBACK_API}${endpoint}`, {
           ...options,
           headers
-        }, 20000);
+        }, Math.max(timeoutMs, 25000));
         const fallbackData = await fallbackRes.json().catch(() => ({}));
         if (!fallbackRes.ok) {
           throw new Error(fallbackData.error || 'Server error occurred');
@@ -163,9 +166,10 @@ export const api = {
   updateSettings: (data) => request('/settings/admin', { method: 'PUT', body: JSON.stringify(data) }),
 
   // Upload
-  uploadImage: (file) => {
+  uploadImage: async (file) => {
+    const optimized = await optimizeImageForUpload(file);
     const fd = new FormData();
-    fd.append('image', file);
-    return request('/upload', { method: 'POST', body: fd });
+    fd.append('image', optimized);
+    return request('/upload', { method: 'POST', body: fd, timeoutMs: 120000 });
   }
 };

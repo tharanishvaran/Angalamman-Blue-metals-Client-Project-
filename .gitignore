@@ -37,3 +37,6 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# Local image assets folder
+pictures/
